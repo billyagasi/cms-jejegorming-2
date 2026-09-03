@@ -1,0 +1,15 @@
+# Konfigurasi deploy Netlify untuk frontend (Vite + React SPA)
+# Asumsi: root repo Git berisi isi folder frontend ini langsung.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# SPA fallback: semua route diarahkan ke index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
