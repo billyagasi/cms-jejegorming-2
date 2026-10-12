@@ -50,6 +50,7 @@ export default function AppointmentManager() {
           a.ownerName.toLowerCase().includes(q) ||
           a.ownerPhone.includes(search) ||
           a.pets.some((p) => p.petName.toLowerCase().includes(q)) ||
+          (a.service?.name || '').toLowerCase().includes(q) ||
           (a.doctorName || '').toLowerCase().includes(q);
         return matchesStatus && matchesSearch;
       })
@@ -193,6 +194,7 @@ export default function AppointmentManager() {
                     <p className="mt-0.5 text-[11px] text-slate-500">
                       📅 {formatDayDateID(appt.date)} • 🕒 {appt.timeSlot} • 🩺 {appt.doctorName || '—'}
                     </p>
+                    {appt.service && <p className="mt-1 text-[11px] font-semibold text-brand-700 dark:text-brand-300">🏥 {appt.service.name}</p>}
                     <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
                       {appt.pets.map((p) => `🐾 ${p.petName} (${p.reasons.join('/')})`).join('  •  ')}
                     </p>
@@ -368,6 +370,7 @@ function AppointmentDetailModal({
     >
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
+          {draft.service && <Badge tone="brand">🏥 {draft.service.name}</Badge>}
           <Badge tone="brand">🚙 {draft.accommodation}</Badge>
           <Badge tone="sky">{draft.ownerPhone}</Badge>
           {draft.ownerCallPreference && <Badge tone="slate">Panggil: {draft.ownerCallPreference}</Badge>}
@@ -591,6 +594,7 @@ function InvoiceModal({ appointment, onClose }: { appointment: Appointment | nul
           <Row l="Pemilik" r={appointment.ownerName} />
           <Row l="No. WA" r={appointment.ownerPhone} />
           <Row l="Dokter" r={appointment.doctorName || '-'} />
+          <Row l="Layanan" r={appointment.service?.name || '-'} />
           <Row l="Jadwal" r={`${appointment.date.split('-').reverse().join('/')} ${appointment.timeSlot}`} />
           <Row l="Status" r={appointment.billClosed ? 'LUNAS' : 'BELUM DIBAYAR'} />
         </div>

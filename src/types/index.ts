@@ -265,6 +265,8 @@ export interface Appointment {
   timeSlot: string;
   /** 1 dokter per booking (dipilih pelanggan atau auto-assign) */
   doctorName?: string;
+  /** Snapshot layanan khusus yang dipilih saat registrasi publik. */
+  service?: ClinicalService;
   /** Pet Taxi | Pet Ojek | Diantar Sendiri | Diantar Kerabat/Keluarga */
   accommodation: string;
   /** Maks 2 hewan per booking */
@@ -347,6 +349,13 @@ export interface AppointmentSettings {
   consentText: string;
 }
 
+export interface ClinicalService {
+  name: string;
+  price: number;
+  category: string;
+  description: string;
+}
+
 export interface AppConfig {
   packages: PackageItem[];
   addons: AddOnItem[];
@@ -369,6 +378,8 @@ export interface AppConfig {
   appointmentReasons: string[];
   appointmentComplaints: string[];
   appointmentPreVisitQuestions: string[];
+  /** Katalog layanan yang dipilih sebelum dokter dan jadwal. */
+  clinicalServices: ClinicalService[];
   appointmentSettings: AppointmentSettings;
   /** Master tindakan & obat klinik (untuk bill appointment) */
   clinicItems: ClinicItem[];

@@ -14,7 +14,7 @@ export default function GuestTabSwitcher() {
 
   const options = [
     { id: 'portal' as const, label: '🐾 Reservasi Grooming' },
-    { id: 'appointment' as const, label: '🩺 Appointment Dokter' },
+    { id: 'appointment' as const, label: '🩺 Layanan Khusus' },
     { id: 'tracker' as const, label: '🔎 Cek Status' },
   ];
 

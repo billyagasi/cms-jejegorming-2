@@ -135,7 +135,7 @@ function BookingCard({ entry }: { entry: BookingResult }) {
   }
   if (entry.kind === 'appointment') {
     const item = entry.item;
-    return <Card><CardHeader icon={<Stethoscope size={16} />} title={`Appointment — ${item.pets.map((pet) => pet.petName).join(', ')}`} subtitle={`${formatDayDateID(item.date)} • ${item.timeSlot}`} status={item.status} /><div className="mt-3 grid gap-2 sm:grid-cols-2"><Meta label="Dokter" value={item.doctorName || 'Menunggu penentuan'} /><Meta label="Akomodasi" value={item.accommodation} /></div><p className="mt-2 text-[10px] text-slate-500">ID tiket: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{item.id}</span></p></Card>;
+    return <Card><CardHeader icon={<Stethoscope size={16} />} title={`Appointment — ${item.pets.map((pet) => pet.petName).join(', ')}`} subtitle={`${formatDayDateID(item.date)} • ${item.timeSlot}`} status={item.status} /><div className="mt-3 grid gap-2 sm:grid-cols-2"><Meta label="Layanan" value={item.service?.name || 'Pemeriksaan klinik'} /><Meta label="Dokter" value={item.doctorName || 'Menunggu penentuan'} /><Meta label="Akomodasi" value={item.accommodation} /><Meta label="Estimasi layanan" value={item.service ? `Mulai ${formatRupiah(item.service.price)}` : '-'} /></div><p className="mt-2 text-[10px] text-slate-500">ID tiket: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{item.id}</span></p></Card>;
   }
   const item = entry.item;
   const latest = [...item.dailyNotes].sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`))[0];

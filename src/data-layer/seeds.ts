@@ -312,6 +312,44 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     'Makanan terakhir apa yang dimakan?',
     'Apakah ada perubahan perilaku?',
   ],
+  clinicalServices: [
+    {
+      name: 'Konsultasi Umum & Check-up',
+      price: 75000,
+      category: 'Pemeriksaan',
+      description: 'Pemeriksaan fisik dasar, evaluasi gejala klinis, dan konsultasi kesehatan atau nutrisi.',
+    },
+    {
+      name: 'Vaksinasi & Imunisasi',
+      price: 150000,
+      category: 'Tindakan',
+      description: 'Layanan vaksin inti dan booster sesuai usia, spesies, serta riwayat vaksinasi hewan.',
+    },
+    {
+      name: 'Sterilisasi / Kebiri',
+      price: 450000,
+      category: 'Operasi',
+      description: 'Konsultasi dan penjadwalan tindakan steril atau kebiri dengan pemeriksaan praoperasi.',
+    },
+    {
+      name: 'Rawat Inap / Opname Medis',
+      price: 100000,
+      category: 'Perawatan',
+      description: 'Pengawasan medis, terapi terjadwal, dan monitoring kondisi pasien per hari.',
+    },
+    {
+      name: 'Operasi & Tindakan Bedah Mayor',
+      price: 1500000,
+      category: 'Operasi',
+      description: 'Konsultasi tindakan bedah khusus dengan evaluasi dokter dan persiapan anestesi.',
+    },
+    {
+      name: 'Grooming Medis & Terapi Jamur/Kutu',
+      price: 120000,
+      category: 'Sanitasi',
+      description: 'Perawatan kulit dan bulu terapeutik berdasarkan evaluasi atau petunjuk dokter.',
+    },
+  ],
   appointmentSettings: {
     sessionHours: ['09:00 - 10:00', '10:00 - 11:00', '13:00 - 14:00', '14:00 - 15:00', '15:00 - 16:00'],
     maxPetsPerHour: 2,

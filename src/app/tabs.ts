@@ -34,7 +34,7 @@ export const TAB_GROUPS: TabGroup[] = [
     label: 'Beranda',
     tabs: [
       { id: 'portal', label: 'Reservasi Mandiri', icon: DoorOpen },
-      { id: 'appointment', label: 'Appointment Dokter', icon: Stethoscope },
+      { id: 'appointment', label: 'Layanan Khusus', icon: Stethoscope },
       { id: 'tracker', label: 'Cek Status & Rekam Medis', icon: SearchCheck },
       { id: 'pos', label: 'POS Kasir', icon: ShoppingBag },
     ],

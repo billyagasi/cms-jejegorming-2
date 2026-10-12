@@ -377,6 +377,16 @@ export default function SetupManualDashboard({ onEditReservation }: SetupManualD
           <SectionCard icon={<Stethoscope size={14} />} title="Appointment Klinik — Master">
             <StringListEditor label="Dokter Hewan" items={draft.doctors} onChange={(items) => update({ doctors: items })} placeholder="cth. drh. Ratna Wijaya" />
             <div className="mt-4">
+              <p className="mb-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">Layanan Khusus Registrasi</p>
+              <ItemListEditor
+                items={draft.clinicalServices}
+                fields={['name', 'price', 'category', 'description']}
+                onChange={(items) => update({ clinicalServices: items })}
+                renderPreview={(item) => `${item.name} — ${item.category} — ${formatRupiah(Number(item.price) || 0)}`}
+                emptyTemplate={{ name: 'Layanan Baru', price: 0, category: 'Pemeriksaan', description: '' }}
+              />
+            </div>
+            <div className="mt-4">
               <StringListEditor label="Alasan Kunjungan (maks 2 dipilih per hewan)" items={draft.appointmentReasons} onChange={(items) => update({ appointmentReasons: items })} placeholder="cth. Vaksinasi" />
             </div>
             <div className="mt-4">

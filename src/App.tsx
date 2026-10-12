@@ -106,7 +106,7 @@ function Shell() {
           onOpenStaffLogin={() => setIsStaffLoginOpen(true)}
           onOpenAddReservation={() => openAddReservation()}
         />
-        {/* Switcher layanan untuk guest: Grooming | Appointment */}
+        {/* Switcher layanan untuk guest: Grooming | Layanan Khusus | Cek Status */}
         <GuestTabSwitcher />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
           <TabRouter
