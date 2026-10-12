@@ -13,6 +13,7 @@ import {
   History,
   Stethoscope,
   BedDouble,
+  SearchCheck,
   type LucideIcon,
 } from 'lucide-react';
 import type { TabId } from '../app/store';
@@ -34,6 +35,7 @@ export const TAB_GROUPS: TabGroup[] = [
     tabs: [
       { id: 'portal', label: 'Reservasi Mandiri', icon: DoorOpen },
       { id: 'appointment', label: 'Appointment Dokter', icon: Stethoscope },
+      { id: 'tracker', label: 'Cek Status & Rekam Medis', icon: SearchCheck },
       { id: 'pos', label: 'POS Kasir', icon: ShoppingBag },
     ],
   },
@@ -71,4 +73,4 @@ export const TAB_LABELS: Record<TabId, string> = Object.fromEntries(
 ) as Record<TabId, string>;
 
 /** Tab yang bisa diakses tanpa login backoffice */
-export const PUBLIC_TABS: TabId[] = ['portal', 'appointment'];
+export const PUBLIC_TABS: TabId[] = ['portal', 'appointment', 'tracker'];

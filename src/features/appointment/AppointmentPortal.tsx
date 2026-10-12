@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Stethoscope, PartyPopper, Plus, UserRound } from 'lucide-react';
+import { CheckCircle2, Copy, SearchCheck, Stethoscope, PartyPopper, Plus, UserRound } from 'lucide-react';
 import { Appointment, AppointmentPet } from '../../types';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -11,7 +11,7 @@ import SignaturePad from '../../components/common/SignaturePad';
 import { useAppConfig, useAppointments, useSaveAppointment, useAddActivityLog, useAddNotificationLog } from '../../data-layer/hooks';
 import { useAppStore } from '../../app/store';
 import { pushToast } from '../../components/ui/toastStore';
-import { formatDayDateID, todayISO } from '../../lib/format';
+import { copyToClipboard, formatDayDateID, todayISO } from '../../lib/format';
 import { DraftApptPet, MAX_PETS, ACCOMMODATIONS, createDraftApptPet, toApptPet } from './appointmentData';
 import { PetIdentityCard } from './PetIdentityCard';
 import AnamnesaCard from './AnamnesaCard';
@@ -69,6 +69,7 @@ export default function AppointmentPortal() {
   const [signatureData, setSignatureData] = useState<string | undefined>(undefined);
   const [errorText, setErrorText] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submittedAppointment, setSubmittedAppointment] = useState<Appointment | null>(null);
 
   useEffect(() => {
     if (pets.length === 0) {
@@ -264,6 +265,7 @@ export default function AppointmentPortal() {
           status: 'Delivered',
         });
 
+        setSubmittedAppointment(appointment);
         setSubmitSuccess(true);
         // Reset wizard
         setCurrentStep(0);
@@ -581,7 +583,7 @@ export default function AppointmentPortal() {
       </form>
 
       {/* Success overlay */}
-      {submitSuccess && (
+      {submitSuccess && submittedAppointment && (
         <div className="animate-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-2xl border-2 border-emerald-500 bg-white p-6 text-center shadow-2xl dark:bg-slate-900">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/60">
@@ -594,13 +596,41 @@ export default function AppointmentPortal() {
               Data appointment telah diterima! Notifikasi WhatsApp simulasi terkirim. Admin akan mengonfirmasi jadwal
               Anda melalui modul Appointment Klinik.
             </p>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left dark:border-slate-700 dark:bg-slate-800/60">
+              <p className="text-[9px] font-bold tracking-wide text-slate-400 uppercase">ID tiket Anda</p>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="min-w-0 flex-1 break-all text-xs font-bold text-slate-800 dark:text-slate-100">{submittedAppointment.id}</code>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const copied = await copyToClipboard(submittedAppointment.id);
+                    pushToast({ tone: copied ? 'success' : 'error', title: copied ? 'ID tiket disalin' : 'Gagal menyalin ID tiket' });
+                  }}
+                  className="cursor-pointer rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-900"
+                  aria-label="Salin ID tiket"
+                >
+                  <Copy size={13} />
+                </button>
+              </div>
+              <p className="mt-1.5 text-[9px] leading-relaxed text-slate-400">Simpan ID ini untuk mengecek status bersama nomor WhatsApp Anda.</p>
+            </div>
             <div className="mt-4 flex justify-center gap-2">
               <Badge tone="brand">Status: Waiting</Badge>
-              <Badge tone="sky">{pets.length} Hewan</Badge>
+              <Badge tone="sky">{submittedAppointment.pets.length} Hewan</Badge>
             </div>
-            <Button variant="success" size="sm" className="mt-5" onClick={() => setSubmitSuccess(false)}>
-              Selesai
-            </Button>
+            <div className="mt-5 flex justify-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setSubmitSuccess(false)}>Selesai</Button>
+              <Button
+                variant="success"
+                size="sm"
+                onClick={() => {
+                  setSubmitSuccess(false);
+                  useAppStore.getState().setTab('tracker');
+                }}
+              >
+                <SearchCheck size={13} /> Cek Status
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 export type TabId =
   | 'portal'
   | 'appointment'
+  | 'tracker'
   | 'appointments'
   | 'inpatients'
   | 'queue'
