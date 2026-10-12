@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { jsPDF } from 'jspdf';
-import { Stethoscope, Search, Clock, Calendar, Trash2, CheckCircle2, XCircle, Pencil, Printer, Wallet, Pill } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BedDouble, CalendarRange, CheckCircle2, CircleCheckBig, ClipboardCheck, Clock, FileHeart, ListChecks, MessageCircle, Pencil, Pill, Printer, Search, Stethoscope, Trash2, UserCheck, Wallet, XCircle } from 'lucide-react';
 import { Appointment, AppointmentPet, AppointmentTreatmentItem, ReservationStatus } from '../../types';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -8,14 +8,16 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
-import { Input, Select } from '../../components/ui/Input';
+import { Input, Select, Textarea } from '../../components/ui/Input';
 import { StatCard } from '../../components/ui/Section';
-import { useAppointments, useSaveAppointment, useDeleteAppointment, useAddActivityLog, useAppConfig, useInventory, useSaveInventoryItem } from '../../data-layer/hooks';
+import { useAppointments, useSaveAppointment, useDeleteAppointment, useAddActivityLog, useAddNotificationLog, useAppConfig, useInventory, useSaveInventoryItem } from '../../data-layer/hooks';
 import { useAppStore } from '../../app/store';
 import { formatRupiah, formatDateTimeID, formatDayDateID, todayISO } from '../../lib/format';
 import { pushToast } from '../../components/ui/toastStore';
 
-type StatusFilter = 'All' | 'Active' | ReservationStatus;
+type AppointmentStage = 'Pending' | 'Confirmed' | 'In_Progress' | 'Completed' | 'Cancelled';
+type StatusFilter = 'All' | 'Active' | AppointmentStage;
+type PeriodMode = 'day' | 'week' | 'all';
 
 let billItemSeq = 1;
 
@@ -24,27 +26,37 @@ export default function AppointmentManager() {
   const saveAppointment = useSaveAppointment();
   const deleteAppointment = useDeleteAppointment();
   const addActivityLog = useAddActivityLog();
+  const addNotificationLog = useAddNotificationLog();
   const { data: config } = useAppConfig();
   const { data: inventory = [] } = useInventory();
   const saveInventory = useSaveInventoryItem();
   const session = useAppStore((s) => s.session);
+  const setTab = useAppStore((s) => s.setTab);
+  const setInpatientPrefill = useAppStore((s) => s.setInpatientPrefill);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Active');
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('week');
+  const [selectedDate, setSelectedDate] = useState(todayISO());
+  const [serviceFilter, setServiceFilter] = useState('All');
   const [detail, setDetail] = useState<Appointment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Appointment | null>(null);
   const [invoiceAppt, setInvoiceAppt] = useState<Appointment | null>(null);
 
+  const periodAppointments = useMemo(() => appointments.filter((appointment) => isInPeriod(appointment.date, selectedDate, periodMode)), [appointments, periodMode, selectedDate]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return appointments
+    return periodAppointments
       .filter((a) => {
+        const stage = appointmentStage(a);
         const matchesStatus =
           statusFilter === 'All'
             ? true
             : statusFilter === 'Active'
-              ? a.status !== 'Completed' && a.status !== 'Cancelled'
-              : a.status === statusFilter;
+              ? stage !== 'Completed' && stage !== 'Cancelled'
+              : stage === statusFilter;
+        const matchesService = serviceFilter === 'All' || a.service?.name === serviceFilter;
         const matchesSearch =
           !q ||
           a.ownerName.toLowerCase().includes(q) ||
@@ -52,19 +64,20 @@ export default function AppointmentManager() {
           a.pets.some((p) => p.petName.toLowerCase().includes(q)) ||
           (a.service?.name || '').toLowerCase().includes(q) ||
           (a.doctorName || '').toLowerCase().includes(q);
-        return matchesStatus && matchesSearch;
+        return matchesStatus && matchesService && matchesSearch;
       })
       .sort((a, b) => {
         const dateComp = a.date.localeCompare(b.date);
         if (dateComp !== 0) return dateComp;
         return a.timeSlot.localeCompare(b.timeSlot);
       });
-  }, [appointments, search, statusFilter]);
+  }, [periodAppointments, search, serviceFilter, statusFilter]);
 
   const today = todayISO();
   const apptToday = appointments.filter((a) => a.date === today && a.status !== 'Cancelled').length;
-  const waiting = appointments.filter((a) => a.status === 'Waiting').length;
-  const inProgress = appointments.filter((a) => a.status === 'In_Progress').length;
+  const waiting = periodAppointments.filter((a) => appointmentStage(a) === 'Pending').length;
+  const confirmed = periodAppointments.filter((a) => appointmentStage(a) === 'Confirmed').length;
+  const inProgress = periodAppointments.filter((a) => appointmentStage(a) === 'In_Progress').length;
 
   const log = (action: string, targetId: string, targetName: string, details: string) => {
     addActivityLog.mutate({
@@ -80,16 +93,77 @@ export default function AppointmentManager() {
   };
 
   const setStatus = (appt: Appointment, status: ReservationStatus) => {
+    const updated = {
+      ...appt,
+      status,
+      completedAt: status === 'Completed' ? new Date().toISOString() : appt.completedAt,
+    };
     saveAppointment.mutate(
-      { ...appt, status },
+      updated,
       {
         onSuccess: () => {
           log('Status Appointment', appt.id, appt.ownerName, `Status appointment diubah menjadi ${status}`);
           pushToast({ tone: 'success', title: 'Status Diperbarui', message: `${appt.ownerName} → ${status.replace('_', ' ')}` });
-          setDetail((d) => (d ? { ...d, status } : d));
+          setDetail((d) => (d ? { ...d, ...updated } : d));
         },
       }
     );
+  };
+
+  const notifyOwner = (appt: Appointment, type: 'Appointment_Confirmed' | 'Appointment_Checked_In', message: string) => {
+    addNotificationLog.mutate({
+      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      reservationId: appt.id,
+      petName: appt.pets.map((pet) => pet.petName).join(', '),
+      ownerName: appt.ownerName,
+      ownerPhone: appt.ownerPhone,
+      type,
+      message,
+      timestamp: new Date().toISOString(),
+      channel: 'WhatsApp',
+      status: 'Delivered',
+    });
+  };
+
+  const confirmAppointment = (appt: Appointment) => {
+    const updated = { ...appt, confirmedAt: new Date().toISOString() };
+    saveAppointment.mutate(updated, {
+      onSuccess: () => {
+        log('Konfirmasi Appointment', appt.id, appt.ownerName, `${appt.service?.name || 'Pemeriksaan klinik'} • ${appt.date} ${appt.timeSlot}`);
+        notifyOwner(updated, 'Appointment_Confirmed', `[WA] Halo ${appt.ownerName}, appointment ${appt.service?.name || 'klinik'} untuk ${appt.pets.map((pet) => pet.petName).join(', ')} telah dikonfirmasi pada ${formatDayDateID(appt.date)} pukul ${appt.timeSlot}.`);
+        setDetail((current) => current?.id === appt.id ? updated : current);
+        pushToast({ tone: 'success', title: 'Appointment dikonfirmasi', message: 'Notifikasi WhatsApp simulasi telah dicatat.' });
+      },
+    });
+  };
+
+  const checkInAppointment = (appt: Appointment) => {
+    if (appt.date !== todayISO()) {
+      pushToast({ tone: 'error', title: 'Check-in belum tersedia', message: `Check-in hanya dapat dilakukan pada tanggal kunjungan: ${formatDayDateID(appt.date)}.` });
+      return;
+    }
+    const queueNumber = appt.queueNumber || nextQueueNumber(appointments, appt.date);
+    const now = new Date().toISOString();
+    const updated: Appointment = { ...appt, confirmedAt: appt.confirmedAt || now, checkedInAt: now, queueNumber, status: 'In_Progress' };
+    saveAppointment.mutate(updated, {
+      onSuccess: () => {
+        log('Check-in Appointment', appt.id, appt.ownerName, `Nomor antrean ${queueNumber}`);
+        notifyOwner(updated, 'Appointment_Checked_In', `[WA] ${appt.ownerName}, check-in berhasil. Nomor antrean klinik ${queueNumber} untuk ${appt.pets.map((pet) => pet.petName).join(', ')}.`);
+        setDetail((current) => current?.id === appt.id ? updated : current);
+        pushToast({ tone: 'success', title: `Check-in ${queueNumber}`, message: 'Pasien masuk antrean pemeriksaan.' });
+      },
+    });
+  };
+
+  const referToInpatient = (appt: Appointment, petIndex: number) => {
+    saveAppointment.mutate(appt, {
+      onSuccess: () => {
+        log('Rujuk Rawat Inap', appt.id, appt.pets[petIndex]?.petName || appt.ownerName, 'Data appointment diteruskan ke registrasi rawat inap');
+        setInpatientPrefill({ appointmentId: appt.id, petIndex });
+        setDetail(null);
+        setTab('inpatients');
+      },
+    });
   };
 
   const handleDelete = (appt: Appointment) => {
@@ -118,7 +192,7 @@ export default function AppointmentManager() {
       })
     );
 
-    const closed: Appointment = { ...appt, billClosed: true, payment, status: 'Completed' };
+    const closed: Appointment = { ...appt, billClosed: true, payment, status: 'Completed', completedAt: new Date().toISOString() };
     saveAppointment.mutate(closed, {
       onSuccess: () => {
         log('Tutup Bill', appt.id, appt.ownerName, `Bill appointment ditutup — ${formatRupiah(billTotal(closed))} (${payment.method})`);
@@ -131,26 +205,47 @@ export default function AppointmentManager() {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Appointment Hari Ini" value={apptToday} tone="brand" icon={<Calendar size={18} />} />
-        <StatCard label="Waiting" value={waiting} tone="amber" hint="Menunggu konfirmasi" />
-        <StatCard label="In Progress" value={inProgress} tone="emerald" icon={<Stethoscope size={18} />} hint="Sedang ditangani" />
+      <Card className="overflow-hidden bg-gradient-to-br from-slate-950 via-brand-950 to-brand-900 text-white">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-950/30"><ClipboardCheck size={20} /></div>
+            <div><h2 className="font-display text-base font-bold">Command Center Layanan Klinik</h2><p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-white/65">Verifikasi booking, check-in antrean, pemeriksaan, rekam medis, billing, dan handoff Rawat Inap dalam satu alur.</p></div>
+          </div>
+          <div className="flex flex-wrap gap-2"><Badge tone="amber"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" /> {waiting} perlu verifikasi</Badge><Badge tone="emerald"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Notifikasi aktif</Badge></div>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Kunjungan Hari Ini" value={apptToday} tone="brand" icon={<CalendarRange size={18} />} hint="Seluruh status aktif" />
+        <StatCard label="Perlu Verifikasi" value={waiting} tone="amber" icon={<Clock size={18} />} hint="Booking baru" />
+        <StatCard label="Terkonfirmasi" value={confirmed} tone="sky" icon={<UserCheck size={18} />} hint="Menunggu check-in" />
+        <StatCard label="Sedang Diperiksa" value={inProgress} tone="emerald" icon={<Stethoscope size={18} />} hint="Antrean aktif" />
       </div>
 
       <Card>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+              {([['day', 'Harian'], ['week', 'Mingguan'], ['all', 'Semua']] as [PeriodMode, string][]).map(([mode, label]) => <button type="button" key={mode} onClick={() => setPeriodMode(mode)} className={`cursor-pointer rounded-lg px-3 py-1.5 text-[11px] font-bold transition-colors ${periodMode === mode ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-900 dark:text-brand-300' : 'text-slate-500'}`}>{label}</button>)}
+            </div>
+            {periodMode !== 'all' && <div className="flex items-center justify-between gap-2 sm:justify-end"><button type="button" onClick={() => setSelectedDate(shiftISODate(selectedDate, periodMode === 'week' ? -7 : -1))} className="cursor-pointer rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" aria-label="Periode sebelumnya"><ArrowLeft size={14} /></button><button type="button" onClick={() => setSelectedDate(todayISO())} className="min-w-52 cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">{periodLabel(selectedDate, periodMode)}</button><button type="button" onClick={() => setSelectedDate(shiftISODate(selectedDate, periodMode === 'week' ? 7 : 1))} className="cursor-pointer rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" aria-label="Periode berikutnya"><ArrowRight size={14} /></button></div>}
+          </div>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative min-w-56 flex-1">
             <Search size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
             <Input
               className="pl-9"
-              placeholder="Cari pemilik / hewan / dokter…"
+              placeholder="Cari pemilik, WhatsApp, hewan, layanan, atau dokter…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <Select value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)} className="lg:max-w-64"><option value="All">Semua layanan</option>{(config?.clinicalServices ?? []).map((service) => <option key={service.name} value={service.name}>{service.name}</option>)}</Select>
+          </div>
           <div className="flex flex-wrap gap-1.5">
-            {(['All', 'Active', 'Waiting', 'In_Progress', 'Completed', 'Cancelled'] as StatusFilter[]).map((s) => (
+            {(['All', 'Active', 'Pending', 'Confirmed', 'In_Progress', 'Completed', 'Cancelled'] as StatusFilter[]).map((s) => (
               <button
+                type="button"
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={`cursor-pointer rounded-full border px-3 py-1 text-[11px] font-bold transition-colors ${
@@ -159,7 +254,7 @@ export default function AppointmentManager() {
                     : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700'
                 }`}
               >
-                {s === 'All' ? 'Semua' : s === 'Active' ? 'Aktif' : s.replace('_', ' ')}
+                {filterLabel(s)}
               </button>
             ))}
           </div>
@@ -174,21 +269,19 @@ export default function AppointmentManager() {
         <div className="space-y-3">
           {filtered.map((appt) => {
             const total = billTotal(appt);
+            const stage = appointmentStage(appt);
             return (
-              <Card key={appt.id} hover>
+              <Card key={appt.id} hover className="overflow-hidden">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="font-display text-sm font-bold text-slate-900 dark:text-white">{appt.ownerName}</h4>
-                      <Badge tone={appt.status === 'Completed' ? 'emerald' : appt.status === 'Cancelled' ? 'slate' : appt.status === 'In_Progress' ? 'amber' : 'brand'}>
-                        {appt.status.replace('_', ' ')}
-                      </Badge>
+                      <StageBadge stage={stage} />
+                      {appt.queueNumber && <Badge tone="sky"><ListChecks size={10} /> Antrean {appt.queueNumber}</Badge>}
                       {appt.status !== 'Cancelled' && (
                         appt.billClosed
                           ? <Badge tone="emerald">🟢 Lunas {formatRupiah(billTotal(appt))}</Badge>
-                          : total > 0
-                            ? <Badge tone="rose">🔴 Belum ditutup — {formatRupiah(total)}</Badge>
-                            : <Badge tone="slate">Belum ada tindakan</Badge>
+                          : <Badge tone="slate">Estimasi bill {formatRupiah(total)}</Badge>
                       )}
                     </div>
                     <p className="mt-0.5 text-[11px] text-slate-500">
@@ -198,18 +291,22 @@ export default function AppointmentManager() {
                     <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
                       {appt.pets.map((p) => `🐾 ${p.petName} (${p.reasons.join('/')})`).join('  •  ')}
                     </p>
+                    <StageRail appointment={appt} />
                   </div>
-                  <div className="flex shrink-0 gap-1.5">
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    {stage === 'Pending' && <Button size="sm" variant="success" onClick={() => confirmAppointment(appt)}><CheckCircle2 size={12} /> Konfirmasi</Button>}
+                    {stage === 'Confirmed' && <Button size="sm" onClick={() => checkInAppointment(appt)}><ListChecks size={12} /> Check-in</Button>}
                     <Button size="sm" variant="secondary" onClick={() => setDetail(appt)}>
                       <Pencil size={12} /> Kelola
                     </Button>
-                    <button
+                    <a href={`https://wa.me/${waNumber(appt.ownerPhone)}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" title="Hubungi WhatsApp"><MessageCircle size={13} /></a>
+                    {appt.status !== 'Completed' && <button
                       onClick={() => setDeleteTarget(appt)}
                       className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
-                      title="Hapus appointment"
+                      title={appt.status === 'Cancelled' ? 'Hapus permanen' : 'Batalkan appointment'}
                     >
                       <Trash2 size={14} />
-                    </button>
+                    </button>}
                   </div>
                 </div>
               </Card>
@@ -224,6 +321,9 @@ export default function AppointmentManager() {
         inventory={inventory}
         onClose={() => setDetail(null)}
         onStatus={(appt, status) => setStatus(appt, status)}
+        onConfirm={confirmAppointment}
+        onCheckIn={checkInAppointment}
+        onReferInpatient={referToInpatient}
         onSave={(appt) =>
           saveAppointment.mutate(appt, {
             onSuccess: () => {
@@ -243,17 +343,24 @@ export default function AppointmentManager() {
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
-        title="Hapus appointment?"
-        message={`Appointment ${deleteTarget?.ownerName} pada ${deleteTarget?.date} ${deleteTarget?.timeSlot} akan dihapus permanen.`}
-        confirmLabel="Hapus"
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          if (deleteTarget.status === 'Cancelled') handleDelete(deleteTarget);
+          else {
+            setStatus({ ...deleteTarget, cancelReason: 'Dibatalkan oleh staf klinik' }, 'Cancelled');
+            setDeleteTarget(null);
+          }
+        }}
+        title={deleteTarget?.status === 'Cancelled' ? 'Hapus appointment permanen?' : 'Batalkan appointment?'}
+        message={deleteTarget?.status === 'Cancelled' ? `Riwayat ${deleteTarget.ownerName} akan dihapus permanen.` : `Appointment ${deleteTarget?.ownerName} akan disimpan sebagai Dibatalkan agar audit trail tetap tersedia.`}
+        confirmLabel={deleteTarget?.status === 'Cancelled' ? 'Hapus Permanen' : 'Batalkan'}
       />
     </div>
   );
 }
 
 function billTotal(appt: Appointment): number {
-  return appt.pets.reduce(
+  return (appt.service?.price ?? 0) + appt.pets.reduce(
     (sum, pet) => sum + pet.treatments.reduce((s, t) => s + t.subtotal, 0),
     0
   );
@@ -266,6 +373,9 @@ function AppointmentDetailModal({
   inventory,
   onClose,
   onStatus,
+  onConfirm,
+  onCheckIn,
+  onReferInpatient,
   onSave,
   onPreviewInvoice,
   onCloseBill,
@@ -274,6 +384,9 @@ function AppointmentDetailModal({
   inventory: { id: string; name: string; stock: number; sellingPrice?: number }[];
   onClose: () => void;
   onStatus: (appt: Appointment, status: ReservationStatus) => void;
+  onConfirm: (appt: Appointment) => void;
+  onCheckIn: (appt: Appointment) => void;
+  onReferInpatient: (appt: Appointment, petIndex: number) => void;
   onSave: (appt: Appointment) => void;
   onPreviewInvoice: (appt: Appointment) => void;
   onCloseBill: (appt: Appointment, payment: NonNullable<Appointment['payment']>) => void;
@@ -346,11 +459,8 @@ function AppointmentDetailModal({
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <div className="flex gap-1.5">
-            {draft.status === 'Waiting' && (
-              <Button size="sm" variant="secondary" onClick={() => onStatus(draft, 'In_Progress')}>
-                <Clock size={12} /> Mulai
-              </Button>
-            )}
+            {appointmentStage(draft) === 'Pending' && <Button size="sm" variant="success" onClick={() => onConfirm(draft)}><CheckCircle2 size={12} /> Konfirmasi</Button>}
+            {appointmentStage(draft) === 'Confirmed' && <Button size="sm" onClick={() => onCheckIn(draft)}><ListChecks size={12} /> Check-in Pasien</Button>}
             {draft.status === 'In_Progress' && !draft.billClosed && (
               <Button size="sm" variant="outline-danger" onClick={() => onStatus(draft, 'Cancelled')}>
                 <XCircle size={12} /> Batalkan
@@ -369,7 +479,10 @@ function AppointmentDetailModal({
       }
     >
       <div className="space-y-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40"><StageRail appointment={draft} expanded /></div>
         <div className="flex flex-wrap gap-2">
+          <StageBadge stage={appointmentStage(draft)} />
+          {draft.queueNumber && <Badge tone="sky"><ListChecks size={10} /> Antrean {draft.queueNumber}</Badge>}
           {draft.service && <Badge tone="brand">🏥 {draft.service.name}</Badge>}
           <Badge tone="brand">🚙 {draft.accommodation}</Badge>
           <Badge tone="sky">{draft.ownerPhone}</Badge>
@@ -382,6 +495,10 @@ function AppointmentDetailModal({
             <h4 className="font-display mb-2 text-sm font-bold text-slate-800 dark:text-slate-100">
               🐾 {pet.petName} ({pet.petType} — {pet.petBreed})
             </h4>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              <Button type="button" size="sm" variant="secondary" onClick={() => printMedicalResume(draft, idx)}><FileHeart size={12} /> Resume Medis</Button>
+              <Button type="button" size="sm" variant="secondary" disabled={draft.status === 'Waiting' || draft.status === 'Cancelled'} onClick={() => onReferInpatient(draft, idx)} title={draft.status === 'Waiting' ? 'Check-in pasien terlebih dahulu' : 'Teruskan data ke Rawat Inap'}><BedDouble size={12} /> Lanjut Rawat Inap</Button>
+            </div>
             <div className="mb-2 flex flex-wrap gap-1.5">
               {pet.reasons.map((r) => (
                 <Badge key={r} tone="brand">{r}</Badge>
@@ -397,6 +514,13 @@ function AppointmentDetailModal({
                     ✅ {c.name}: {c.detail || '—'}
                   </p>
                 ))}
+              </div>
+            )}
+
+            {pet.preVisitAnswers.length > 0 && (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/30">
+                <p className="mb-2 text-[10px] font-bold tracking-wide text-slate-400 uppercase">Pertanyaan pra-kunjungan</p>
+                <div className="space-y-2">{pet.preVisitAnswers.map((item, answerIndex) => <label key={`${item.question}-${answerIndex}`} className="block"><span className="mb-1 block text-[10px] font-semibold text-slate-600 dark:text-slate-300">{item.question}</span><Input value={item.answer} placeholder="Lengkapi saat pasien datang" onChange={(event) => updatePet(idx, 'preVisitAnswers', pet.preVisitAnswers.map((answer, index) => index === answerIndex ? { ...answer, answer: event.target.value } : answer))} className="text-xs" /></label>)}</div>
               </div>
             )}
 
@@ -478,11 +602,14 @@ function AppointmentDetailModal({
           </div>
         ))}
 
+        <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800"><label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">Catatan kunjungan internal</label><Textarea rows={3} value={draft.notes || ''} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Catatan dokter atau staf yang perlu diteruskan ke proses berikutnya…" /></div>
+
         {/* Bill & Pembayaran */}
         <div className="rounded-xl border-2 border-amber-300 bg-amber-50/50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
           <p className="font-display mb-2 flex items-center gap-1.5 text-sm font-bold text-amber-800 dark:text-amber-300">
             <Wallet size={15} /> Bill & Pembayaran
           </p>
+          {draft.service && <div className="mb-2 flex items-center justify-between rounded-lg border border-amber-200 bg-white/70 px-3 py-2 text-xs dark:border-amber-900 dark:bg-slate-900/70"><span className="font-semibold text-slate-600 dark:text-slate-300">Biaya layanan dasar • {draft.service.name}</span><span className="font-mono font-bold text-slate-800 dark:text-slate-100">{formatRupiah(draft.service.price)}</span></div>}
           <div className="mb-3 flex items-center justify-between rounded-xl bg-slate-900 px-4 py-3 text-white dark:bg-slate-950">
             <span className="text-xs font-bold tracking-wide uppercase">Total Tagihan</span>
             <span className="font-mono text-xl font-bold text-amber-300">{formatRupiah(total)}</span>
@@ -599,6 +726,12 @@ function InvoiceModal({ appointment, onClose }: { appointment: Appointment | nul
           <Row l="Status" r={appointment.billClosed ? 'LUNAS' : 'BELUM DIBAYAR'} />
         </div>
         <div className="my-3 border-t border-dashed border-slate-300" />
+        {appointment.service && (
+          <div className="mb-2 flex justify-between gap-3 font-mono text-[11px]">
+            <span className="truncate pr-2">Biaya layanan — {appointment.service.name}</span>
+            <span>{appointment.service.price.toLocaleString('id-ID')}</span>
+          </div>
+        )}
         {appointment.pets.map((pet) => (
           <div key={pet.petName} className="mb-2">
             <p className="text-[10px] font-bold">{pet.petName}{pet.diagnosis ? ` — ${pet.diagnosis}` : ''}</p>
@@ -652,4 +785,138 @@ function formatDateTimeStr(iso?: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function appointmentStage(appointment: Appointment): AppointmentStage {
+  if (appointment.status === 'Cancelled') return 'Cancelled';
+  if (appointment.status === 'Completed') return 'Completed';
+  if (appointment.status === 'In_Progress') return 'In_Progress';
+  return appointment.confirmedAt ? 'Confirmed' : 'Pending';
+}
+
+function StageBadge({ stage }: { stage: AppointmentStage }) {
+  const config: Record<AppointmentStage, { label: string; tone: 'amber' | 'sky' | 'brand' | 'emerald' | 'slate' }> = {
+    Pending: { label: 'Menunggu Verifikasi', tone: 'amber' },
+    Confirmed: { label: 'Terkonfirmasi', tone: 'sky' },
+    In_Progress: { label: 'Sedang Diperiksa', tone: 'brand' },
+    Completed: { label: 'Selesai', tone: 'emerald' },
+    Cancelled: { label: 'Dibatalkan', tone: 'slate' },
+  };
+  return <Badge tone={config[stage].tone}>{config[stage].label}</Badge>;
+}
+
+function StageRail({ appointment, expanded = false }: { appointment: Appointment; expanded?: boolean }) {
+  const stage = appointmentStage(appointment);
+  const activeIndex = stage === 'Pending' ? 0 : stage === 'Confirmed' ? 1 : stage === 'In_Progress' ? 2 : stage === 'Completed' ? 3 : -1;
+  const steps = [
+    { label: 'Booking', time: appointment.createdAt },
+    { label: 'Konfirmasi', time: appointment.confirmedAt },
+    { label: 'Check-in', time: appointment.checkedInAt },
+    { label: 'Selesai', time: appointment.completedAt || (appointment.status === 'Completed' ? appointment.payment?.paidAt : undefined) },
+  ];
+  if (stage === 'Cancelled') return <p className="mt-3 text-[10px] font-semibold text-slate-400">Alur dihentikan karena appointment dibatalkan.</p>;
+  return (
+    <div className={`${expanded ? '' : 'mt-3'} grid grid-cols-4 gap-1`}>
+      {steps.map((step, index) => {
+        const done = index <= activeIndex;
+        const current = index === activeIndex;
+        return <div key={step.label} className="relative text-center"><div className={`absolute top-2 left-0 h-0.5 w-full ${index === 0 ? 'left-1/2 w-1/2' : index === steps.length - 1 ? 'w-1/2' : ''} ${index <= activeIndex ? 'bg-brand-400' : 'bg-slate-200 dark:bg-slate-700'}`} /><span className={`relative mx-auto flex h-4 w-4 items-center justify-center rounded-full border-2 ${done ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'}`}>{done && <CircleCheckBig size={9} />}</span><p className={`mt-1 text-[9px] font-bold ${current ? 'text-brand-700 dark:text-brand-300' : 'text-slate-400'}`}>{step.label}</p>{expanded && <p className="mt-0.5 text-[8px] text-slate-400">{step.time ? formatDateTimeStr(step.time) : '—'}</p>}</div>;
+      })}
+    </div>
+  );
+}
+
+function filterLabel(filter: StatusFilter): string {
+  return ({ All: 'Semua', Active: 'Aktif', Pending: 'Perlu Verifikasi', Confirmed: 'Terkonfirmasi', In_Progress: 'Pemeriksaan', Completed: 'Selesai', Cancelled: 'Dibatalkan' } as Record<StatusFilter, string>)[filter];
+}
+
+function parseISODate(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function isoFromDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function shiftISODate(value: string, days: number): string {
+  const date = parseISODate(value);
+  date.setDate(date.getDate() + days);
+  return isoFromDate(date);
+}
+
+function weekRange(value: string): { start: string; end: string } {
+  const date = parseISODate(value);
+  const offset = date.getDay() === 0 ? -6 : 1 - date.getDay();
+  date.setDate(date.getDate() + offset);
+  const start = isoFromDate(date);
+  date.setDate(date.getDate() + 6);
+  return { start, end: isoFromDate(date) };
+}
+
+function isInPeriod(date: string, selectedDate: string, mode: PeriodMode): boolean {
+  if (mode === 'all') return true;
+  if (mode === 'day') return date === selectedDate;
+  const { start, end } = weekRange(selectedDate);
+  return date >= start && date <= end;
+}
+
+function periodLabel(selectedDate: string, mode: PeriodMode): string {
+  if (mode === 'day') return formatDayDateID(selectedDate);
+  const { start, end } = weekRange(selectedDate);
+  return `${formatDayDateID(start)} — ${formatDayDateID(end)}`;
+}
+
+function nextQueueNumber(appointments: Appointment[], date: string): string {
+  const max = appointments.filter((item) => item.date === date).reduce((highest, item) => {
+    const value = Number(item.queueNumber?.replace(/\D/g, '') || 0);
+    return Math.max(highest, value);
+  }, 0);
+  return `A-${String(max + 1).padStart(3, '0')}`;
+}
+
+function waNumber(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
+}
+
+function printMedicalResume(appointment: Appointment, petIndex: number) {
+  const pet = appointment.pets[petIndex];
+  if (!pet) return;
+  const doc = new jsPDF();
+  const left = 18;
+  let y = 20;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('JEJE PET CARE', left, y);
+  y += 7;
+  doc.setFontSize(11);
+  doc.text('Resume Rekam Medis Pasien', left, y);
+  y += 9;
+  doc.setDrawColor(210);
+  doc.line(left, y, 192, y);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const rows = [
+    ['ID Kunjungan', appointment.id],
+    ['Tanggal', `${formatDayDateID(appointment.date)} • ${appointment.timeSlot}`],
+    ['Pemilik', `${appointment.ownerName} • ${appointment.ownerPhone}`],
+    ['Pasien', `${pet.petName} • ${pet.petType} • ${pet.petBreed}`],
+    ['Layanan', appointment.service?.name || 'Pemeriksaan klinik'],
+    ['Dokter PJ', appointment.doctorName || '-'],
+  ];
+  rows.forEach(([label, value]) => { doc.setFont('helvetica', 'bold'); doc.text(label, left, y); doc.setFont('helvetica', 'normal'); doc.text(String(value), 55, y); y += 6; });
+  y += 3;
+  const sections = [
+    ['Keluhan / Anamnesa', pet.conditionStory || '-'],
+    ['Diagnosis', pet.diagnosis || 'Belum diisi'],
+    ['Tindakan & Obat', pet.treatments.length ? pet.treatments.map((item) => `${item.name} x${item.quantity}`).join(', ') : 'Belum ada tindakan atau obat'],
+    ['Catatan', appointment.notes || '-'],
+  ];
+  sections.forEach(([label, value]) => { doc.setFont('helvetica', 'bold'); doc.text(label, left, y); y += 5; doc.setFont('helvetica', 'normal'); const lines = doc.splitTextToSize(String(value), 174); doc.text(lines, left, y); y += lines.length * 5 + 5; });
+  doc.setFontSize(8);
+  doc.setTextColor(110);
+  doc.text(`Dicetak ${formatDateTimeStr(new Date().toISOString())}`, left, 285);
+  doc.save(`resume-medis-${pet.petName.toLowerCase().replace(/\s+/g, '-')}-${appointment.date}.pdf`);
 }

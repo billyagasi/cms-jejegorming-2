@@ -543,6 +543,7 @@ export function buildDemoAppointments(): Appointment[] {
       date: daysFromNow(0),
       timeSlot: '09:00 - 10:00',
       doctorName: 'drh. Ratna Wijaya',
+      service: { name: 'Vaksinasi & Imunisasi', price: 150000, category: 'Tindakan', description: 'Layanan vaksin dan pemeriksaan sebelum imunisasi.' },
       accommodation: 'Diantar Sendiri',
       pets: [
         {
@@ -579,6 +580,7 @@ export function buildDemoAppointments(): Appointment[] {
       date: daysFromNow(1),
       timeSlot: '10:00 - 11:00',
       doctorName: 'drh. Salsabila Putri',
+      service: { name: 'Konsultasi Umum & Check-up', price: 75000, category: 'Pemeriksaan', description: 'Pemeriksaan fisik dan konsultasi kesehatan hewan.' },
       accommodation: 'Pet Taxi',
       pets: [
         {
@@ -613,6 +615,7 @@ export function buildDemoAppointments(): Appointment[] {
       consentText: undefined,
       signatureData: undefined,
       status: 'Waiting',
+      confirmedAt: isoAt(-1, 18, 15),
       notes: '',
       createdAt: isoAt(-1, 18, 0),
     },
@@ -626,6 +629,7 @@ export function buildDemoAppointments(): Appointment[] {
       date: daysFromNow(-2),
       timeSlot: '10:00 - 11:00',
       doctorName: 'drh. Bimo Prasetyo',
+      service: { name: 'Konsultasi Umum & Check-up', price: 75000, category: 'Pemeriksaan', description: 'Pemeriksaan fisik dan konsultasi kesehatan hewan.' },
       accommodation: 'Diantar Sendiri',
       pets: [
         {
@@ -650,9 +654,13 @@ export function buildDemoAppointments(): Appointment[] {
       consentText: undefined,
       signatureData: undefined,
       status: 'Completed',
+      confirmedAt: isoAt(-3, 11, 15),
+      checkedInAt: isoAt(-2, 9, 55),
+      completedAt: isoAt(-2, 10, 40),
+      queueNumber: 'A-001',
       notes: '',
       billClosed: true,
-      payment: { method: 'QRIS', amountPaid: 155000, changeAmount: 0, paidAt: isoAt(-2, 10, 40) },
+      payment: { method: 'QRIS', amountPaid: 230000, changeAmount: 0, paidAt: isoAt(-2, 10, 40) },
       createdAt: isoAt(-3, 11, 0),
     },
   ];

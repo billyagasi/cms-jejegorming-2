@@ -261,12 +261,13 @@ export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservatio
                                           <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
                                             {formatDayDateID(appt.date)} • {appt.timeSlot}
                                           </p>
-                                          <p className="truncate text-[10.5px] text-slate-500">🩺 {appt.doctorName || '—'}</p>
+                                          <p className="truncate text-[10.5px] text-slate-500">🩺 {appt.doctorName || '—'}{appt.queueNumber ? ` • Antrean ${appt.queueNumber}` : ''}</p>
+                                          {appt.service && <p className="truncate text-[10px] font-semibold text-brand-600 dark:text-brand-300">🏥 {appt.service.name}</p>}
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                           <Badge tone="sky">🩺 Appointment</Badge>
                                           <Badge tone={appt.status === 'Completed' ? 'emerald' : appt.status === 'Cancelled' ? 'slate' : appt.status === 'In_Progress' ? 'amber' : 'brand'}>
-                                            {appt.status.replace('_', ' ')}
+                                            {appt.status === 'Waiting' && appt.confirmedAt ? 'Terkonfirmasi' : appt.status.replace('_', ' ')}
                                           </Badge>
                                         </div>
                                       </div>

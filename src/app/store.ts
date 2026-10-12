@@ -44,6 +44,10 @@ interface AppState {
   /** Prefill portal dari kalender (quick-book) */
   portalPrefill: { date?: string; slot?: string } | null;
   setPortalPrefill: (prefill: { date?: string; slot?: string } | null) => void;
+
+  /** Handoff appointment ke form registrasi Rawat Inap. */
+  inpatientPrefill: { appointmentId: string; petIndex: number } | null;
+  setInpatientPrefill: (prefill: { appointmentId: string; petIndex: number } | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -65,6 +69,8 @@ export const useAppStore = create<AppState>()(
 
       portalPrefill: null,
       setPortalPrefill: (prefill) => set({ portalPrefill: prefill }),
+      inpatientPrefill: null,
+      setInpatientPrefill: (prefill) => set({ inpatientPrefill: prefill }),
     }),
     {
       name: 'jpc_app_state',

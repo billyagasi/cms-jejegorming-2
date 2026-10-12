@@ -74,6 +74,8 @@ export default function InpatientManager() {
   const saveInventory = useSaveInventoryItem();
   const addActivityLog = useAddActivityLog();
   const session = useAppStore((s) => s.session);
+  const inpatientPrefill = useAppStore((s) => s.inpatientPrefill);
+  const setInpatientPrefill = useAppStore((s) => s.setInpatientPrefill);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -91,6 +93,12 @@ export default function InpatientManager() {
   const standardActive = active.filter((item) => item.cageNumber.startsWith('Kandang Rawat Inap'));
   const critical = inpatients.filter((item) => item.status === 'Kritis').length;
   const occupancy = Math.min(100, Math.round((standardActive.length / capacity) * 100));
+
+  useEffect(() => {
+    if (!inpatientPrefill) return;
+    setEditingPatient(null);
+    setShowPatientForm(true);
+  }, [inpatientPrefill]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -261,12 +269,13 @@ export default function InpatientManager() {
       <PatientFormModal
         open={showPatientForm}
         editing={editingPatient}
+        prefillSource={inpatientPrefill ? `${inpatientPrefill.appointmentId}::${inpatientPrefill.petIndex}` : ''}
         appointments={appointments}
         existing={inpatients}
         doctors={config?.doctors ?? []}
         capacity={capacity}
-        onClose={() => { setShowPatientForm(false); setEditingPatient(null); }}
-        onSave={savePatient}
+        onClose={() => { setShowPatientForm(false); setEditingPatient(null); setInpatientPrefill(null); }}
+        onSave={(patient, isNew) => { setInpatientPrefill(null); savePatient(patient, isNew); }}
       />
       <NoteFormModal patient={noteFor} editing={editingNote} inventory={inventory} doctors={config?.doctors ?? []} sessionName={session?.username || ''} onClose={() => { setNoteFor(null); setEditingNote(null); }} onSave={saveNote} />
       <NotePreview note={previewNote} onClose={() => setPreviewNote(null)} />
@@ -344,8 +353,8 @@ function PatientDetail({ patient, onEdit, onDelete, onDischarge, onAddNote, onEd
   );
 }
 
-function PatientFormModal({ open, editing, appointments, existing, doctors, capacity, onClose, onSave }: {
-  open: boolean; editing: Inpatient | null; appointments: Appointment[]; existing: Inpatient[]; doctors: string[]; capacity: number; onClose: () => void; onSave: (patient: Inpatient, isNew: boolean) => void;
+function PatientFormModal({ open, editing, prefillSource, appointments, existing, doctors, capacity, onClose, onSave }: {
+  open: boolean; editing: Inpatient | null; prefillSource?: string; appointments: Appointment[]; existing: Inpatient[]; doctors: string[]; capacity: number; onClose: () => void; onSave: (patient: Inpatient, isNew: boolean) => void;
 }) {
   const empty = { source: '', petName: '', petType: 'Kucing' as PetType, petBreed: '', petAge: '', petGender: '', ownerName: '', ownerPhone: '', cageMode: 'standard', cageNumber: '', diagnosis: '', doctorName: '', emergencyContact: '', admissionDate: todayISO(), status: 'Perawatan Aktif' as InpatientStatus };
   const [form, setForm] = useState(empty);
@@ -360,10 +369,28 @@ function PatientFormModal({ open, editing, appointments, existing, doctors, capa
       setForm({ source: editing.appointmentId != null ? `${editing.appointmentId}::${editing.appointmentPetIndex ?? 0}` : '', petName: editing.petName, petType: editing.petType, petBreed: editing.petBreed, petAge: editing.petAge || '', petGender: editing.petGender || '', ownerName: editing.ownerName, ownerPhone: editing.ownerPhone, cageMode: editing.cageNumber.startsWith('Kandang Rawat Inap') ? 'standard' : 'custom', cageNumber: editing.cageNumber, diagnosis: editing.diagnosis, doctorName: editing.doctorName, emergencyContact: editing.emergencyContact, admissionDate: editing.admissionDate, status: editing.status });
     } else {
       const firstAvailable = cages.find((cage) => !active.some((item) => item.cageNumber === cage)) || '';
-      setForm({ ...empty, cageNumber: firstAvailable, doctorName: doctors[0] || '' });
+      const [appointmentId, petIndexText] = (prefillSource || '').split('::');
+      const appointment = appointments.find((item) => item.id === appointmentId);
+      const petIndex = Number(petIndexText || 0);
+      const pet = appointment?.pets[petIndex];
+      setForm(pet && appointment ? {
+        ...empty,
+        source: prefillSource || '',
+        cageNumber: firstAvailable,
+        petName: pet.petName,
+        petType: pet.petType,
+        petBreed: pet.petBreed,
+        petAge: pet.petAge || '',
+        petGender: pet.petGender || '',
+        ownerName: appointment.ownerName,
+        ownerPhone: appointment.ownerPhone,
+        emergencyContact: appointment.ownerPhone,
+        diagnosis: pet.diagnosis || pet.conditionStory || pet.reasons.join(', '),
+        doctorName: appointment.doctorName || doctors[0] || '',
+      } : { ...empty, cageNumber: firstAvailable, doctorName: doctors[0] || '' });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, editing]);
+  }, [open, editing, prefillSource, appointments]);
 
   const candidates = appointments.flatMap((appointment) => appointment.pets.map((pet, petIndex) => ({ appointment, pet, petIndex, key: `${appointment.id}::${petIndex}` })))
     .filter(({ appointment, petIndex }) => !existing.some((item) => item.status !== 'Sudah Pulang' && item.appointmentId === appointment.id && item.appointmentPetIndex === petIndex && item.id !== editing?.id));

@@ -78,6 +78,8 @@ export interface Reservation {
 export type NotificationLogType =
   | 'Reservation_Created'
   | 'Appointment_Created'
+  | 'Appointment_Confirmed'
+  | 'Appointment_Checked_In'
   | 'Step_Update'
   | 'Grooming_Completed'
   | 'Rescheduled';
@@ -275,6 +277,13 @@ export interface Appointment {
   consentText?: string;
   signatureData?: string;
   status: ReservationStatus;
+  /** Tahap operasional appointment tanpa mengubah status bersama milik grooming. */
+  confirmedAt?: string;
+  checkedInAt?: string;
+  completedAt?: string;
+  /** Nomor antrean klinik yang diberikan saat check-in. */
+  queueNumber?: string;
+  cancelReason?: string;
   notes?: string;
   createdAt: string;
   /** Bill ditutup (sudah dibayar & stok obat dipotong) */
