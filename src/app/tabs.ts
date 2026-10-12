@@ -12,6 +12,7 @@ import {
   Package,
   History,
   Stethoscope,
+  BedDouble,
   type LucideIcon,
 } from 'lucide-react';
 import type { TabId } from '../app/store';
@@ -41,6 +42,7 @@ export const TAB_GROUPS: TabGroup[] = [
     tabs: [
       { id: 'queue', label: 'Antrean', icon: ListChecks },
       { id: 'appointments', label: 'Appointment Klinik', icon: Stethoscope },
+      { id: 'inpatients', label: 'Rawat Inap', icon: BedDouble },
       { id: 'steps', label: 'Tindakan (5-Step)', icon: Layers },
       { id: 'scheduler', label: 'Kalender Sesi', icon: Calendar },
       { id: 'reminder', label: 'Reminder', icon: BellRing },

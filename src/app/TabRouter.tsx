@@ -5,6 +5,7 @@ import FeaturePlaceholder from '../features/placeholder/FeaturePlaceholder';
 import PortalPage from '../features/portal';
 import AppointmentPortal from '../features/appointment/AppointmentPortal';
 import AppointmentManager from '../features/appointment/AppointmentManager';
+import InpatientManager from '../features/inpatients/InpatientManager';
 import QueuePage from '../features/queue/QueuePage';
 import GroomingStepsManager from '../features/steps/GroomingStepsManager';
 import ScheduleKalender from '../features/schedule/ScheduleKalender';
@@ -50,6 +51,8 @@ export default function TabRouter({
       return <AppointmentPortal />;
     case 'appointments':
       return <AppointmentManager />;
+    case 'inpatients':
+      return <InpatientManager />;
     case 'queue':
       return (
         <QueuePage

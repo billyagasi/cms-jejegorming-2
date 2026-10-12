@@ -7,6 +7,7 @@ import {
   AppConfig,
   WhatsAppTemplate,
   Appointment,
+  Inpatient,
 } from '../types';
 import { AppRepository } from './repository';
 import { loadFromStorage, saveToStorage } from './storage';
@@ -26,6 +27,7 @@ import { seedDemoDataToStorage } from './demoSeed';
 const KEYS = {
   reservations: 'jeje_cached_reservations',
   appointments: 'jpc_appointments',
+  inpatients: 'jpc_inpatients',
   logs: 'jeje_cached_logs',
   inventory: 'jeje_cached_inventory',
   activityLogs: 'jeje_cached_activityLogs',
@@ -138,6 +140,25 @@ export class LocalRepository implements AppRepository {
       KEYS.appointments,
       list.filter((a) => a.id !== id)
     );
+  }
+
+  // --- Rawat inap ---
+  async getInpatients(): Promise<Inpatient[]> {
+    this.ensureSeeded();
+    return loadFromStorage<Inpatient[]>(KEYS.inpatients, []);
+  }
+
+  async saveInpatient(inpatient: Inpatient): Promise<void> {
+    const list = loadFromStorage<Inpatient[]>(KEYS.inpatients, []);
+    const idx = list.findIndex((item) => item.id === inpatient.id);
+    if (idx >= 0) list[idx] = inpatient;
+    else list.unshift(inpatient);
+    saveToStorage(KEYS.inpatients, list);
+  }
+
+  async deleteInpatient(id: string): Promise<void> {
+    const list = loadFromStorage<Inpatient[]>(KEYS.inpatients, []);
+    saveToStorage(KEYS.inpatients, list.filter((item) => item.id !== id));
   }
 
   // --- Log notifikasi ---

@@ -7,6 +7,7 @@ import {
   AppConfig,
   WhatsAppTemplate,
   Appointment,
+  Inpatient,
 } from '../types';
 
 /**
@@ -25,6 +26,11 @@ export interface AppRepository {
   getAppointments(): Promise<Appointment[]>;
   saveAppointment(appointment: Appointment): Promise<void>;
   deleteAppointment(id: string): Promise<void>;
+
+  // Rawat inap
+  getInpatients(): Promise<Inpatient[]>;
+  saveInpatient(inpatient: Inpatient): Promise<void>;
+  deleteInpatient(id: string): Promise<void>;
 
   // Log notifikasi WhatsApp
   getNotificationLogs(): Promise<NotificationLog[]>;

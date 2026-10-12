@@ -285,6 +285,57 @@ export interface Appointment {
   };
 }
 
+// --- Rawat Inap (Klinik) ---
+
+export type InpatientStatus = 'Perawatan Aktif' | 'Observasi' | 'Kritis' | 'Sudah Pulang';
+
+export interface InpatientInventoryUsage {
+  itemId: string;
+  name: string;
+  category: string;
+  unit: string;
+  quantity: number;
+  price: number;
+}
+
+export interface InpatientNote {
+  id: string;
+  date: string;
+  time: string;
+  temperature: number;
+  condition: string;
+  treatment: string;
+  checkedBy: string;
+  medicalTreatment?: string;
+  notes?: string;
+  inventoryItems: InpatientInventoryUsage[];
+  createdAt: string;
+}
+
+/** Snapshot pasien disimpan agar riwayat rawat inap tidak berubah saat data sumber berubah. */
+export interface Inpatient {
+  id: string;
+  appointmentId?: string;
+  appointmentPetIndex?: number;
+  petName: string;
+  petType: PetType;
+  petBreed: string;
+  petAge?: string;
+  petGender?: string;
+  ownerName: string;
+  ownerPhone: string;
+  cageNumber: string;
+  admissionDate: string;
+  dischargeDate?: string;
+  status: InpatientStatus;
+  diagnosis: string;
+  doctorName: string;
+  emergencyContact: string;
+  dailyNotes: InpatientNote[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppointmentSettings {
   /** Jam praktik, cth. '09:00 - 10:00' */
   sessionHours: string[];

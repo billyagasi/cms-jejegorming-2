@@ -7,6 +7,7 @@ import {
   GroomingStep,
   StepStatus,
   Appointment,
+  Inpatient,
 } from '../types';
 
 /**
@@ -657,6 +658,56 @@ export function buildDemoAppointments(): Appointment[] {
   ];
 }
 
+export function buildDemoInpatients(): Inpatient[] {
+  return [
+    {
+      id: 'demo-inp-001',
+      appointmentId: 'demo-appt-001',
+      appointmentPetIndex: 0,
+      petName: 'Bona',
+      petType: 'Anjing',
+      petBreed: 'Poodle Toy',
+      petAge: '1 Tahun',
+      petGender: 'Jantan',
+      ownerName: 'Ibu Santi',
+      ownerPhone: '081398765432',
+      cageNumber: 'Kandang Rawat Inap 01',
+      admissionDate: daysFromNow(-1),
+      status: 'Observasi',
+      diagnosis: 'Gastroenteritis ringan dengan dehidrasi; observasi respons terapi cairan.',
+      doctorName: 'drh. Ratna Wijaya',
+      emergencyContact: '081398765432',
+      dailyNotes: [
+        {
+          id: 'demo-inp-note-001',
+          date: daysFromNow(-1),
+          time: '16:20',
+          temperature: 39.1,
+          condition: 'Pasien sadar dan responsif, masih lemas. Belum muntah kembali sejak masuk kandang.',
+          treatment: 'Terapi cairan dan diet gastrointestinal dalam porsi kecil.',
+          checkedBy: 'drh. Ratna Wijaya',
+          medicalTreatment: 'Monitoring suhu, hidrasi, frekuensi muntah, dan intake makanan.',
+          inventoryItems: [],
+          createdAt: isoAt(-1, 16, 20),
+        },
+        {
+          id: 'demo-inp-note-002',
+          date: daysFromNow(0),
+          time: '08:15',
+          temperature: 38.6,
+          condition: 'Lebih aktif, mau makan sekitar setengah porsi, tidak ada muntah semalam.',
+          treatment: 'Terapi cairan dilanjutkan dan evaluasi pulang sore hari bila kondisi stabil.',
+          checkedBy: 'drh. Ratna Wijaya',
+          inventoryItems: [],
+          createdAt: isoAt(0, 8, 15),
+        },
+      ],
+      createdAt: isoAt(-1, 14, 0),
+      updatedAt: isoAt(0, 8, 15),
+    },
+  ];
+}
+
 /** Jalankan seluruh seeding demo ke localStorage. */
 export function seedDemoDataToStorage(write: (key: string, value: unknown) => void): void {
   write('jeje_cached_reservations', buildDemoReservations());
@@ -665,4 +716,5 @@ export function seedDemoDataToStorage(write: (key: string, value: unknown) => vo
   write('jeje_cached_pos_transactions', buildDemoPos());
   write('jeje_cached_activityLogs', buildDemoActivity());
   write('jpc_appointments', buildDemoAppointments());
+  write('jpc_inpatients', buildDemoInpatients());
 }

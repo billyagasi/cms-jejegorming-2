@@ -8,6 +8,7 @@ import {
   AppConfig,
   WhatsAppTemplate,
   Appointment,
+  Inpatient,
 } from '../types';
 
 /**
@@ -53,6 +54,15 @@ export class ApiRepository implements AppRepository {
     return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
   }
   deleteAppointment(): Promise<void> {
+    return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
+  }
+  getInpatients() {
+    return this.request<Inpatient[]>('/api/inpatients');
+  }
+  saveInpatient(): Promise<void> {
+    return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
+  }
+  deleteInpatient(): Promise<void> {
     return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
   }
   getNotificationLogs() {

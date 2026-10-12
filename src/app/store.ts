@@ -5,6 +5,7 @@ export type TabId =
   | 'portal'
   | 'appointment'
   | 'appointments'
+  | 'inpatients'
   | 'queue'
   | 'profile'
   | 'scheduler'

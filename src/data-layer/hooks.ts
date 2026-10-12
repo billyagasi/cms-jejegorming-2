@@ -9,6 +9,7 @@ import {
   AppConfig,
   WhatsAppTemplate,
   Appointment,
+  Inpatient,
 } from '../types';
 
 /**
@@ -19,6 +20,7 @@ import {
 export const queryKeys = {
   reservations: ['reservations'] as const,
   appointments: ['appointments'] as const,
+  inpatients: ['inpatients'] as const,
   logs: ['logs'] as const,
   inventory: ['inventory'] as const,
   activityLogs: ['activity-logs'] as const,
@@ -88,6 +90,34 @@ export function useDeleteAppointment() {
   return useMutation({
     mutationFn: (id: string) => getRepository().deleteAppointment(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.appointments }),
+  });
+}
+
+// --- Rawat inap ---
+
+export function useInpatients() {
+  return useQuery({
+    queryKey: queryKeys.inpatients,
+    queryFn: async () => {
+      const list = await getRepository().getInpatients();
+      return sortDescBy(list, (item) => item.updatedAt);
+    },
+  });
+}
+
+export function useSaveInpatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (inpatient: Inpatient) => getRepository().saveInpatient(inpatient),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.inpatients }),
+  });
+}
+
+export function useDeleteInpatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getRepository().deleteInpatient(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.inpatients }),
   });
 }
 
