@@ -10,6 +10,9 @@ import {
   WhatsAppTemplate,
   Appointment,
   Inpatient,
+  Surgery,
+  VaccinationRecord,
+  ClinicalFollowUp,
 } from '../types';
 
 /**
@@ -21,6 +24,9 @@ export const queryKeys = {
   reservations: ['reservations'] as const,
   appointments: ['appointments'] as const,
   inpatients: ['inpatients'] as const,
+  surgeries: ['surgeries'] as const,
+  vaccinations: ['vaccinations'] as const,
+  clinicalFollowUps: ['clinical-follow-ups'] as const,
   logs: ['logs'] as const,
   inventory: ['inventory'] as const,
   activityLogs: ['activity-logs'] as const,
@@ -118,6 +124,81 @@ export function useDeleteInpatient() {
   return useMutation({
     mutationFn: (id: string) => getRepository().deleteInpatient(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.inpatients }),
+  });
+}
+
+// --- Operasi / bedah ---
+
+export function useSurgeries() {
+  return useQuery({
+    queryKey: queryKeys.surgeries,
+    queryFn: async () => sortDescBy(await getRepository().getSurgeries(), (item) => item.updatedAt),
+  });
+}
+
+export function useSaveSurgery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (surgery: Surgery) => getRepository().saveSurgery(surgery),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.surgeries }),
+  });
+}
+
+export function useDeleteSurgery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getRepository().deleteSurgery(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.surgeries }),
+  });
+}
+
+// --- Vaksinasi ---
+
+export function useVaccinations() {
+  return useQuery({
+    queryKey: queryKeys.vaccinations,
+    queryFn: async () => sortDescBy(await getRepository().getVaccinations(), (item) => item.updatedAt),
+  });
+}
+
+export function useSaveVaccination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (record: VaccinationRecord) => getRepository().saveVaccination(record),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.vaccinations }),
+  });
+}
+
+export function useDeleteVaccination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getRepository().deleteVaccination(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.vaccinations }),
+  });
+}
+
+// --- Follow-up klinis ---
+
+export function useClinicalFollowUps() {
+  return useQuery({
+    queryKey: queryKeys.clinicalFollowUps,
+    queryFn: async () => sortDescBy(await getRepository().getClinicalFollowUps(), (item) => item.updatedAt),
+  });
+}
+
+export function useSaveClinicalFollowUp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (followUp: ClinicalFollowUp) => getRepository().saveClinicalFollowUp(followUp),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.clinicalFollowUps }),
+  });
+}
+
+export function useDeleteClinicalFollowUp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getRepository().deleteClinicalFollowUp(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.clinicalFollowUps }),
   });
 }
 

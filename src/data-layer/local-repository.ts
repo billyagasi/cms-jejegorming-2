@@ -8,6 +8,9 @@ import {
   WhatsAppTemplate,
   Appointment,
   Inpatient,
+  Surgery,
+  VaccinationRecord,
+  ClinicalFollowUp,
 } from '../types';
 import { AppRepository } from './repository';
 import { loadFromStorage, saveToStorage } from './storage';
@@ -28,6 +31,9 @@ const KEYS = {
   reservations: 'jeje_cached_reservations',
   appointments: 'jpc_appointments',
   inpatients: 'jpc_inpatients',
+  surgeries: 'jpc_surgeries',
+  vaccinations: 'jpc_vaccinations',
+  clinicalFollowUps: 'jpc_clinical_follow_ups',
   logs: 'jeje_cached_logs',
   inventory: 'jeje_cached_inventory',
   activityLogs: 'jeje_cached_activityLogs',
@@ -159,6 +165,63 @@ export class LocalRepository implements AppRepository {
   async deleteInpatient(id: string): Promise<void> {
     const list = loadFromStorage<Inpatient[]>(KEYS.inpatients, []);
     saveToStorage(KEYS.inpatients, list.filter((item) => item.id !== id));
+  }
+
+  // --- Operasi / bedah ---
+  async getSurgeries(): Promise<Surgery[]> {
+    this.ensureSeeded();
+    return loadFromStorage<Surgery[]>(KEYS.surgeries, []);
+  }
+
+  async saveSurgery(surgery: Surgery): Promise<void> {
+    const list = loadFromStorage<Surgery[]>(KEYS.surgeries, []);
+    const idx = list.findIndex((item) => item.id === surgery.id);
+    if (idx >= 0) list[idx] = surgery;
+    else list.unshift(surgery);
+    saveToStorage(KEYS.surgeries, list);
+  }
+
+  async deleteSurgery(id: string): Promise<void> {
+    const list = loadFromStorage<Surgery[]>(KEYS.surgeries, []);
+    saveToStorage(KEYS.surgeries, list.filter((item) => item.id !== id));
+  }
+
+  // --- Vaksinasi ---
+  async getVaccinations(): Promise<VaccinationRecord[]> {
+    this.ensureSeeded();
+    return loadFromStorage<VaccinationRecord[]>(KEYS.vaccinations, []);
+  }
+
+  async saveVaccination(record: VaccinationRecord): Promise<void> {
+    const list = loadFromStorage<VaccinationRecord[]>(KEYS.vaccinations, []);
+    const idx = list.findIndex((item) => item.id === record.id);
+    if (idx >= 0) list[idx] = record;
+    else list.unshift(record);
+    saveToStorage(KEYS.vaccinations, list);
+  }
+
+  async deleteVaccination(id: string): Promise<void> {
+    const list = loadFromStorage<VaccinationRecord[]>(KEYS.vaccinations, []);
+    saveToStorage(KEYS.vaccinations, list.filter((item) => item.id !== id));
+  }
+
+  // --- Follow-up klinis ---
+  async getClinicalFollowUps(): Promise<ClinicalFollowUp[]> {
+    this.ensureSeeded();
+    return loadFromStorage<ClinicalFollowUp[]>(KEYS.clinicalFollowUps, []);
+  }
+
+  async saveClinicalFollowUp(followUp: ClinicalFollowUp): Promise<void> {
+    const list = loadFromStorage<ClinicalFollowUp[]>(KEYS.clinicalFollowUps, []);
+    const idx = list.findIndex((item) => item.id === followUp.id);
+    if (idx >= 0) list[idx] = followUp;
+    else list.unshift(followUp);
+    saveToStorage(KEYS.clinicalFollowUps, list);
+  }
+
+  async deleteClinicalFollowUp(id: string): Promise<void> {
+    const list = loadFromStorage<ClinicalFollowUp[]>(KEYS.clinicalFollowUps, []);
+    saveToStorage(KEYS.clinicalFollowUps, list.filter((item) => item.id !== id));
   }
 
   // --- Log notifikasi ---

@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
-import { BookOpen, Search, ChevronDown, PawPrint, FileDown, CreditCard, FileSignature, Trash2, Plus } from 'lucide-react';
+import { BookOpen, Search, ChevronDown, PawPrint, FileDown, CreditCard, FileSignature, Trash2, Plus, HeartPulse, Syringe, BellRing } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { Reservation, Appointment } from '../../types';
+import { Reservation, Appointment, Surgery, VaccinationRecord, ClinicalFollowUp } from '../../types';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
-import { useReservations, useAppointments, useSaveReservation, useAppConfig } from '../../data-layer/hooks';
+import { useReservations, useAppointments, useSaveReservation, useAppConfig, useSurgeries, useVaccinations, useClinicalFollowUps } from '../../data-layer/hooks';
 import { formatRupiah, formatDayDateID, todayISO } from '../../lib/format';
 import { pushToast } from '../../components/ui/toastStore';
 import { parsePhotoUrls } from '../../lib/format';
@@ -25,6 +25,9 @@ interface GroupedPet {
   history: Reservation[];
   /** Riwayat appointment klinik (gabung di timeline) */
   apptHistory: Appointment[];
+  surgeries: Surgery[];
+  vaccinations: VaccinationRecord[];
+  followUps: ClinicalFollowUp[];
 }
 
 interface GroupedOwner {
@@ -35,9 +38,22 @@ interface GroupedOwner {
   pets: GroupedPet[];
 }
 
+type TimelineEntry = {
+  kind: 'grooming' | 'appointment' | 'surgery' | 'vaccination' | 'followup';
+  date: string;
+  res?: Reservation;
+  appt?: Appointment;
+  surgery?: Surgery;
+  vaccination?: VaccinationRecord;
+  followUp?: ClinicalFollowUp;
+};
+
 export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservation }: OwnerMedicalProfileProps) {
   const { data: reservations = [] } = useReservations();
   const { data: appointments = [] } = useAppointments();
+  const { data: surgeries = [] } = useSurgeries();
+  const { data: vaccinations = [] } = useVaccinations();
+  const { data: followUps = [] } = useClinicalFollowUps();
   const saveReservation = useSaveReservation();
   const { data: config } = useAppConfig();
   const loyalty = config?.loyalty ?? { minSpend: 10000, pointValue: 500, minRedeem: 5 };
@@ -66,7 +82,7 @@ export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservatio
       const owner = ownerMap.get(key)!;
       let pet = owner.pets.find((p) => p.petName.toLowerCase() === r.petName.toLowerCase());
       if (!pet) {
-        pet = { petName: r.petName, petType: r.petType, petBreed: r.petBreed, history: [], apptHistory: [] };
+        pet = { petName: r.petName, petType: r.petType, petBreed: r.petBreed, history: [], apptHistory: [], surgeries: [], vaccinations: [], followUps: [] };
         owner.pets.push(pet);
       }
       pet.history.push(r);
@@ -74,35 +90,61 @@ export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservatio
     // Riwayat appointment klinik masuk ke timeline hewan yang sama
     appointments.forEach((appt) => {
       const ownerKey = appt.ownerPhone.trim();
-      const owner = ownerMap.get(ownerKey);
-      if (!owner) return;
+      let owner = ownerMap.get(ownerKey);
+      if (!owner) {
+        owner = { ownerName: appt.ownerName, ownerPhone: appt.ownerPhone, ownerAddress: appt.ownerAddress, ownerEmail: appt.ownerEmail, pets: [] };
+        ownerMap.set(ownerKey, owner);
+      }
       appt.pets.forEach((p) => {
         let pet = owner.pets.find((x) => x.petName.toLowerCase() === p.petName.toLowerCase());
         if (!pet) {
-          pet = { petName: p.petName, petType: p.petType, petBreed: p.petBreed, history: [], apptHistory: [] };
+          pet = { petName: p.petName, petType: p.petType, petBreed: p.petBreed, history: [], apptHistory: [], surgeries: [], vaccinations: [], followUps: [] };
           owner.pets.push(pet);
         }
         pet.apptHistory.push(appt);
       });
     });
+    const ensureClinicalPet = (patient: { ownerPhone: string; ownerName: string; petName: string; petType: string; petBreed?: string }): GroupedPet => {
+        const ownerKey = patient.ownerPhone.trim();
+        let owner = ownerMap.get(ownerKey);
+        if (!owner) {
+          owner = { ownerName: patient.ownerName, ownerPhone: patient.ownerPhone, pets: [] };
+          ownerMap.set(ownerKey, owner);
+        }
+        let pet = owner.pets.find((entry) => entry.petName.toLowerCase() === patient.petName.toLowerCase());
+        if (!pet) {
+          pet = { petName: patient.petName, petType: patient.petType, petBreed: patient.petBreed || '-', history: [], apptHistory: [], surgeries: [], vaccinations: [], followUps: [] };
+          owner.pets.push(pet);
+        }
+        return pet;
+    };
+    surgeries.forEach((item) => ensureClinicalPet(item.patient).surgeries.push(item));
+    vaccinations.forEach((item) => ensureClinicalPet(item.patient).vaccinations.push(item));
+    followUps.forEach((item) => ensureClinicalPet(item.patient).followUps.push(item));
     // history terbaru dulu
     ownerMap.forEach((o) =>
       o.pets.forEach((p) => {
         p.history.sort((a, b) => b.date.localeCompare(a.date));
         p.apptHistory.sort((a, b) => b.date.localeCompare(a.date));
+        p.surgeries.sort((a, b) => b.date.localeCompare(a.date));
+        p.vaccinations.sort((a, b) => b.givenDate.localeCompare(a.givenDate));
+        p.followUps.sort((a, b) => b.followUpDate.localeCompare(a.followUpDate));
       })
     );
     const q = search.toLowerCase();
     return Array.from(ownerMap.values()).filter(
       (o) => !q || o.ownerName.toLowerCase().includes(q) || o.ownerPhone.includes(q) || o.pets.some((p) => p.petName.toLowerCase().includes(q))
     );
-  }, [reservations, appointments, search]);
+  }, [reservations, appointments, surgeries, vaccinations, followUps, search]);
 
   /** Timeline gabungan grooming + appointment, terurut tanggal desc */
-  const timelineFor = (pet: GroupedPet): { kind: 'grooming' | 'appointment'; date: string; res?: Reservation; appt?: Appointment }[] => {
-    const items: { kind: 'grooming' | 'appointment'; date: string; res?: Reservation; appt?: Appointment }[] = [
+  const timelineFor = (pet: GroupedPet): TimelineEntry[] => {
+    const items: TimelineEntry[] = [
       ...pet.history.map((r) => ({ kind: 'grooming' as const, date: r.date, res: r })),
       ...pet.apptHistory.map((a) => ({ kind: 'appointment' as const, date: a.date, appt: a })),
+      ...pet.surgeries.map((surgery) => ({ kind: 'surgery' as const, date: surgery.date, surgery })),
+      ...pet.vaccinations.map((vaccination) => ({ kind: 'vaccination' as const, date: vaccination.givenDate, vaccination })),
+      ...pet.followUps.map((followUp) => ({ kind: 'followup' as const, date: followUp.followUpDate, followUp })),
     ];
     return items.sort((a, b) => b.date.localeCompare(a.date));
   };
@@ -144,6 +186,12 @@ export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservatio
           const petAppt = a.pets.find((x) => x.petName.toLowerCase() === pet.petName.toLowerCase());
           const bill = a.billClosed ? `Bill LUNAS (${a.payment?.method})` : 'Bill belum ditutup';
           line = `[KLINIK] ${a.date} ${a.timeSlot} — ${a.doctorName || '-'} | ${petAppt?.reasons.join(', ') || '-'} | ${petAppt?.diagnosis || 'Belum ada diagnosis'} | ${bill}`;
+        } else if (entry.surgery) {
+          line = `[OPERASI] ${entry.surgery.date} — ${entry.surgery.procedureName} | ${entry.surgery.surgeonName} | ${entry.surgery.status}`;
+        } else if (entry.vaccination) {
+          line = `[VAKSIN] ${entry.vaccination.givenDate} — ${entry.vaccination.vaccineName} | Batch ${entry.vaccination.batchNumber || '-'} | Booster ${entry.vaccination.nextDueDate || '-'}`;
+        } else if (entry.followUp) {
+          line = `[FOLLOW-UP] ${entry.followUp.followUpDate} — ${entry.followUp.sourceType} | ${entry.followUp.status} | ${entry.followUp.recommendedAction}`;
         }
         const wrapped = doc.splitTextToSize(`• ${line}`, 182);
         doc.text(wrapped, 14, y);
@@ -240,7 +288,7 @@ export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservatio
                                   {pet.petName} <span className="font-normal text-slate-400">({pet.petBreed})</span>
                                 </span>
                                 <span className="block text-[10px] text-slate-400">
-                                  {pet.history.length} sesi grooming • {pet.apptHistory.length} appointment
+                                  {pet.history.length} grooming • {pet.apptHistory.length} appointment • {pet.surgeries.length} operasi • {pet.vaccinations.length} vaksin
                                 </span>
                               </span>
                             </span>
@@ -250,7 +298,10 @@ export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservatio
                           {petOpen && (
                             <div className="space-y-2.5 border-t border-slate-100 p-3 dark:border-slate-800">
                               {timelineFor(pet).map((entry) =>
-                                entry.kind === 'appointment' && entry.appt ? (() => {
+                                entry.kind === 'surgery' && entry.surgery ? <ClinicalEventCard key={`s-${entry.surgery.id}`} tone="rose" icon={<HeartPulse size={14} />} label="Operasi" date={entry.surgery.date} title={entry.surgery.procedureName} status={entry.surgery.status} detail={`${entry.surgery.surgeonName}${entry.surgery.preOpDiagnosis ? ` • ${entry.surgery.preOpDiagnosis}` : ''}`} />
+                                : entry.kind === 'vaccination' && entry.vaccination ? <ClinicalEventCard key={`v-${entry.vaccination.id}`} tone="emerald" icon={<Syringe size={14} />} label="Vaksinasi" date={entry.vaccination.givenDate} title={entry.vaccination.vaccineName} status={entry.vaccination.status} detail={`Dokter ${entry.vaccination.veterinarianName} • Batch ${entry.vaccination.batchNumber || '-'}${entry.vaccination.nextDueDate ? ` • Booster ${formatDayDateID(entry.vaccination.nextDueDate)}` : ''}`} />
+                                : entry.kind === 'followup' && entry.followUp ? <ClinicalEventCard key={`f-${entry.followUp.id}`} tone="amber" icon={<BellRing size={14} />} label="Follow-up" date={entry.followUp.followUpDate} title={entry.followUp.sourceType} status={entry.followUp.status} detail={entry.followUp.recommendedAction} />
+                                : entry.kind === 'appointment' && entry.appt ? (() => {
                                   const appt = entry.appt;
                                   const petAppt = appt.pets.find((x) => x.petName.toLowerCase() === pet.petName.toLowerCase()) || appt.pets[0];
                                   const billTotalAppt = petAppt.treatments.reduce((s, t) => s + t.subtotal, 0);
@@ -282,11 +333,14 @@ export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservatio
                                         {petAppt.diagnosis && (
                                           <p className="font-semibold text-brand-700 dark:text-brand-300">🩺 Diagnosis: {petAppt.diagnosis}</p>
                                         )}
+                                        {petAppt.examination && <p className="text-slate-500">🌡️ {petAppt.examination.weight ? `${petAppt.examination.weight} kg` : 'Berat -'} • {petAppt.examination.temperature ? `${petAppt.examination.temperature}°C` : 'Suhu -'} • {petAppt.examination.turgor || 'Turgor -'}</p>}
+                                        {petAppt.examination?.physicalExam && <p className="text-slate-500">🔎 {petAppt.examination.physicalExam}</p>}
                                         {petAppt.treatments.length > 0 && (
                                           <p className="text-slate-500">
-                                            💊 {petAppt.treatments.map((t) => `${t.name} x${t.quantity}`).join(', ')}
+                                            💊 {petAppt.treatments.map((t) => `${t.name} x${t.quantity}${t.dosage ? ` (${t.dosage})` : ''}`).join(', ')}
                                           </p>
                                         )}
+                                        {(petAppt.documents?.length ?? 0) > 0 && <div className="flex flex-wrap gap-1">{petAppt.documents!.map((document) => <a key={document.id} href={document.dataUrl} target="_blank" rel="noreferrer" className="rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-bold text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">📎 {document.kind}: {document.name}</a>)}</div>}
                                         {appt.billClosed && (
                                           <p className="text-emerald-600 dark:text-emerald-400">🟢 Bill lunas — {appt.payment?.method}</p>
                                         )}
@@ -479,4 +533,13 @@ export default function OwnerMedicalProfile({ onOpenResume, onOpenEditReservatio
       />
     </div>
   );
+}
+
+function ClinicalEventCard({ tone, icon, label, date, title, status, detail }: { tone: 'rose' | 'emerald' | 'amber'; icon: React.ReactNode; label: string; date: string; title: string; status: string; detail: string }) {
+  const styles = tone === 'rose'
+    ? 'border-rose-200 bg-rose-50/50 dark:border-rose-900 dark:bg-rose-950/20'
+    : tone === 'emerald'
+      ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20'
+      : 'border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20';
+  return <div className={`rounded-lg border p-3 ${styles}`}><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200">{icon}{formatDayDateID(date)} • {title}</p><p className="mt-1 text-[10.5px] text-slate-500">{detail}</p></div><div className="flex gap-1.5"><Badge tone={tone}>{label}</Badge><Badge tone="slate">{status}</Badge></div></div></div>;
 }

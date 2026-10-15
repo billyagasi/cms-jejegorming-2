@@ -182,7 +182,7 @@ export default function SetupManualDashboard({ onEditReservation }: SetupManualD
                     <Input value={acc.password} onChange={(e) => update({ roleAccounts: draft.roleAccounts.map((a, j) => (j === i ? { ...a, password: e.target.value } : a)) })} className="text-xs" placeholder="Password" />
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {['portal', 'tracker', 'appointments', 'inpatients', 'queue', 'steps', 'scheduler', 'reminder', 'profile', 'logs', 'setup', 'laporan', 'inventaris', 'activityLogs', 'pos'].map((t) => {
+                    {['portal', 'tracker', 'queue', 'queueDisplay', 'inpatients', 'surgeries', 'vaccinations', 'steps', 'scheduler', 'reminder', 'profile', 'logs', 'setup', 'laporan', 'inventaris', 'activityLogs', 'pos'].map((t) => {
                       const allowed = acc.allowedTabs?.includes(t) ?? true;
                       return (
                         <button
@@ -191,7 +191,7 @@ export default function SetupManualDashboard({ onEditReservation }: SetupManualD
                             update({
                               roleAccounts: draft.roleAccounts.map((a, j) => {
                                 if (j !== i) return a;
-                                const cur = a.allowedTabs ?? ['portal', 'queue', 'scheduler', 'pos', 'inventaris', 'steps', 'setup', 'logs', 'activityLogs', 'inpatients'];
+                                const cur = a.allowedTabs ?? ['portal', 'queue', 'queueDisplay', 'scheduler', 'pos', 'inventaris', 'steps', 'setup', 'logs', 'activityLogs', 'inpatients'];
                                 return { ...a, allowedTabs: allowed ? cur.filter((x) => x !== t) : [...cur, t] };
                               }),
                             })

@@ -1,16 +1,17 @@
 import { useMemo, useState } from 'react';
-import { BellRing, ChevronLeft, ChevronRight, Copy, Send, RotateCcw, Save, Search } from 'lucide-react';
-import { Reservation } from '../../types';
+import { BellRing, CheckCircle2, ChevronLeft, ChevronRight, Copy, Plus, Scissors, Send, RotateCcw, Save, Search, Stethoscope, Trash2 } from 'lucide-react';
+import { ClinicalFollowUp, Reservation } from '../../types';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
 import { Field, Input, Select, Textarea } from '../../components/ui/Input';
-import { useReservations } from '../../data-layer/hooks';
+import { useAppointments, useClinicalFollowUps, useDeleteClinicalFollowUp, useInpatients, useReservations, useSaveClinicalFollowUp } from '../../data-layer/hooks';
 import { loadFromStorage, saveToStorage } from '../../data-layer/storage';
-import { copyToClipboard, waLink, formatDayDateID, MONTHS_ID, DAYS_ID } from '../../lib/format';
+import { copyToClipboard, waLink, formatDayDateID, generateId, MONTHS_ID, DAYS_ID, todayISO } from '../../lib/format';
 import { pushToast } from '../../components/ui/toastStore';
+import { buildClinicalPatients, clinicalPatientKey } from '../clinical/clinicalPatients';
 
 type TemplateStyle = 'friendly' | 'professional' | 'promo';
 
@@ -42,6 +43,20 @@ function petEmoji(type: string): string {
 }
 
 export default function KalenderReminder() {
+  const [mode, setMode] = useState<'grooming' | 'clinical'>('grooming');
+  return <div className="space-y-4">
+    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="font-display text-base font-bold text-slate-900 dark:text-white">Reminder & Follow-up</h2><p className="text-[11px] text-slate-500">Satu kalender tindak lanjut grooming dan klinis.</p></div>
+      <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+        <button type="button" onClick={() => setMode('grooming')} className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-bold ${mode === 'grooming' ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-700 dark:text-brand-300' : 'text-slate-500'}`}><Scissors size={14} /> Grooming</button>
+        <button type="button" onClick={() => setMode('clinical')} className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-bold ${mode === 'clinical' ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-700 dark:text-brand-300' : 'text-slate-500'}`}><Stethoscope size={14} /> Klinis</button>
+      </div>
+    </div>
+    {mode === 'grooming' ? <GroomingReminder /> : <ClinicalReminder />}
+  </div>;
+}
+
+function GroomingReminder() {
   const { data: reservations = [] } = useReservations();
 
   const now = new Date();
@@ -231,6 +246,45 @@ export default function KalenderReminder() {
       />
     </div>
   );
+}
+
+function ClinicalReminder() {
+  const { data: followUps = [] } = useClinicalFollowUps();
+  const { data: appointments = [] } = useAppointments();
+  const { data: reservations = [] } = useReservations();
+  const { data: inpatients = [] } = useInpatients();
+  const saveFollowUp = useSaveClinicalFollowUp();
+  const deleteFollowUp = useDeleteClinicalFollowUp();
+  const patients = useMemo(() => buildClinicalPatients(appointments, reservations, inpatients), [appointments, reservations, inpatients]);
+  const [filter, setFilter] = useState<'Pending' | 'Selesai' | 'Semua'>('Pending');
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState<ClinicalFollowUp | null | undefined>(undefined);
+  const visible = followUps.filter((item) => {
+    const q = search.toLowerCase();
+    return (filter === 'Semua' || item.status === filter) && (!q || item.patient.petName.toLowerCase().includes(q) || item.patient.ownerName.toLowerCase().includes(q));
+  }).sort((a, b) => a.followUpDate.localeCompare(b.followUpDate));
+  const overdue = followUps.filter((item) => item.status === 'Pending' && item.followUpDate < todayISO()).length;
+
+  const contact = async (item: ClinicalFollowUp) => {
+    const message = `Halo Kak ${item.patient.ownerName}, kami dari Jeje Pet Care ingin menindaklanjuti kondisi ${item.patient.petName}. ${item.lastCondition} Rekomendasi kami: ${item.recommendedAction} Mohon informasikan perkembangan kondisinya ya. 🐾`;
+    window.open(waLink(item.patient.ownerPhone, message), '_blank');
+    await saveFollowUp.mutateAsync({ ...item, status: 'Selesai', contactedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    pushToast({ tone: 'wa', title: 'WhatsApp dibuka', message: 'Follow-up ditandai selesai dan tetap dapat diedit.' });
+  };
+
+  return <div className="space-y-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><div className="bento-card"><p className="text-[10px] font-bold text-slate-400 uppercase">Pending</p><p className="mt-1 text-xl font-bold text-amber-600">{followUps.filter((item) => item.status === 'Pending').length}</p></div><div className="bento-card"><p className="text-[10px] font-bold text-slate-400 uppercase">Terlambat</p><p className="mt-1 text-xl font-bold text-rose-600">{overdue}</p></div><div className="bento-card"><p className="text-[10px] font-bold text-slate-400 uppercase">Selesai</p><p className="mt-1 text-xl font-bold text-emerald-600">{followUps.filter((item) => item.status === 'Selesai').length}</p></div><div className="bento-card flex items-center justify-center"><Button size="sm" onClick={() => setEditing(null)}><Plus size={13} /> Follow-up Manual</Button></div></div>
+    <Card><div className="grid gap-3 md:grid-cols-[1fr_180px_auto]"><div className="relative"><Search size={14} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari pasien atau pemilik…" /></div><Select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}><option>Pending</option><option>Selesai</option><option>Semua</option></Select><Badge tone="brand" className="self-center justify-center">{visible.length} follow-up</Badge></div></Card>
+    {visible.length === 0 ? <Card><EmptyState icon={<Stethoscope size={22} />} title="Tidak ada follow-up klinis" description="Follow-up dapat dibuat manual atau otomatis dari jadwal booster vaksin." /></Card> : <div className="grid gap-3 xl:grid-cols-2">{visible.map((item) => { const isOverdue = item.status === 'Pending' && item.followUpDate < todayISO(); return <Card key={item.id}><div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-bold text-slate-900 dark:text-white">{item.patient.petName} — {item.patient.ownerName}</h3><Badge tone={item.status === 'Selesai' ? 'emerald' : isOverdue ? 'rose' : 'amber'}>{isOverdue ? 'Terlambat' : item.status}</Badge><Badge tone="slate">{item.sourceType}</Badge></div><p className="mt-1 text-xs text-slate-500">{formatDayDateID(item.followUpDate)} • PIC {item.staffInCharge}</p></div><Button size="icon" variant="ghost" onClick={() => void deleteFollowUp.mutateAsync(item.id)}><Trash2 size={14} /></Button></div><div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3 text-xs dark:bg-slate-800/60"><p><b>Kondisi terakhir:</b> {item.lastCondition}</p><p><b>Rekomendasi:</b> {item.recommendedAction}</p>{item.responseNotes && <p><b>Respons:</b> {item.responseNotes}</p>}</div><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => setEditing(item)}>Edit</Button>{item.status === 'Pending' && <Button size="sm" variant="success" onClick={() => void contact(item)}><Send size={13} /> Hubungi & Selesaikan</Button>}{item.status === 'Selesai' && <Badge tone="emerald"><CheckCircle2 size={11} /> {item.contactedAt ? 'Sudah dihubungi' : 'Selesai'}</Badge>}</div></Card>; })}</div>}
+    <ClinicalFollowUpForm key={editing?.id ?? (editing === null ? 'new' : 'closed')} open={editing !== undefined} value={editing || null} patients={patients} onClose={() => setEditing(undefined)} onSave={(item) => void saveFollowUp.mutateAsync(item).then(() => { setEditing(undefined); pushToast({ tone: 'success', title: 'Follow-up tersimpan' }); })} />
+  </div>;
+}
+
+function ClinicalFollowUpForm({ open, value, patients, onClose, onSave }: { open: boolean; value: ClinicalFollowUp | null; patients: ReturnType<typeof buildClinicalPatients>; onClose: () => void; onSave: (item: ClinicalFollowUp) => void }) {
+  const [patientKey, setPatientKey] = useState(value ? clinicalPatientKey(value.patient) : patients[0]?.key || ''); const [sourceType, setSourceType] = useState<ClinicalFollowUp['sourceType']>(value?.sourceType || 'Rawat Jalan'); const [followUpDate, setFollowUpDate] = useState(value?.followUpDate || todayISO()); const [staffInCharge, setStaffInCharge] = useState(value?.staffInCharge || 'Staf Klinik'); const [lastCondition, setLastCondition] = useState(value?.lastCondition || ''); const [recommendedAction, setRecommendedAction] = useState(value?.recommendedAction || ''); const [responseNotes, setResponseNotes] = useState(value?.responseNotes || ''); const [status, setStatus] = useState<ClinicalFollowUp['status']>(value?.status || 'Pending'); const [error, setError] = useState('');
+  if (!open) return null;
+  const submit = () => { const patient = patients.find((item) => item.key === patientKey) || (value ? { ...value.patient, key: patientKey, label: '' } : undefined); if (!patient || !followUpDate || !staffInCharge || !lastCondition || !recommendedAction) { setError('Pasien, jadwal, PIC, kondisi, dan rekomendasi wajib diisi.'); return; } const now = new Date().toISOString(); onSave({ id: value?.id || generateId('FU'), patient: { petName: patient.petName, petType: patient.petType, petBreed: patient.petBreed, ownerName: patient.ownerName, ownerPhone: patient.ownerPhone, appointmentId: patient.appointmentId, appointmentPetIndex: patient.appointmentPetIndex }, sourceType, sourceId: value?.sourceId, followUpDate, status, staffInCharge, lastCondition, recommendedAction, contactChannel: value?.contactChannel || 'WhatsApp', responseNotes: responseNotes || undefined, contactedAt: value?.contactedAt, createdAt: value?.createdAt || now, updatedAt: now }); };
+  return <Modal isOpen={open} onClose={onClose} title={value ? 'Edit Follow-up Klinis' : 'Jadwalkan Follow-up Klinis'} icon={<Stethoscope size={18} />} size="lg" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit}>Simpan</Button></>}><div className="space-y-4"><div className="grid gap-3 md:grid-cols-2"><Field label="Pasien" required><Select value={patientKey} onChange={(event) => setPatientKey(event.target.value)} disabled={!!value}><option value="">Pilih pasien</option>{patients.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</Select></Field><Field label="Jenis Follow-up"><Select value={sourceType} onChange={(event) => setSourceType(event.target.value as ClinicalFollowUp['sourceType'])}>{['Rawat Jalan', 'Rawat Inap', 'Pasca Operasi', 'Vaksinasi'].map((item) => <option key={item}>{item}</option>)}</Select></Field><Field label="Tanggal" required><Input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} /></Field><Field label="PIC" required><Input value={staffInCharge} onChange={(event) => setStaffInCharge(event.target.value)} /></Field><Field label="Status"><Select value={status} onChange={(event) => setStatus(event.target.value as ClinicalFollowUp['status'])}>{['Pending', 'Selesai', 'Batal'].map((item) => <option key={item}>{item}</option>)}</Select></Field></div><Field label="Kondisi Terakhir" required><Textarea value={lastCondition} onChange={(event) => setLastCondition(event.target.value)} /></Field><Field label="Rekomendasi Tindakan" required><Textarea value={recommendedAction} onChange={(event) => setRecommendedAction(event.target.value)} /></Field><Field label="Respons Pemilik"><Textarea value={responseNotes} onChange={(event) => setResponseNotes(event.target.value)} /></Field>{error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600">{error}</p>}</div></Modal>;
 }
 
 function WhatsAppGeneratorModal({

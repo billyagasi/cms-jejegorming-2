@@ -9,6 +9,9 @@ import {
   WhatsAppTemplate,
   Appointment,
   Inpatient,
+  Surgery,
+  VaccinationRecord,
+  ClinicalFollowUp,
 } from '../types';
 
 /**
@@ -63,6 +66,33 @@ export class ApiRepository implements AppRepository {
     return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
   }
   deleteInpatient(): Promise<void> {
+    return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
+  }
+  getSurgeries() {
+    return this.request<Surgery[]>('/api/surgeries');
+  }
+  saveSurgery(): Promise<void> {
+    return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
+  }
+  deleteSurgery(): Promise<void> {
+    return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
+  }
+  getVaccinations() {
+    return this.request<VaccinationRecord[]>('/api/vaccinations');
+  }
+  saveVaccination(): Promise<void> {
+    return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
+  }
+  deleteVaccination(): Promise<void> {
+    return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
+  }
+  getClinicalFollowUps() {
+    return this.request<ClinicalFollowUp[]>('/api/clinical-follow-ups');
+  }
+  saveClinicalFollowUp(): Promise<void> {
+    return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
+  }
+  deleteClinicalFollowUp(): Promise<void> {
     return Promise.reject(new Error('ApiRepository belum diimplementasikan (Phase 2).'));
   }
   getNotificationLogs() {

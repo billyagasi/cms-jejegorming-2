@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAppStore } from './app/store';
 import { useAppConfig, useSaveReservation, useAddActivityLog } from './data-layer/hooks';
@@ -9,11 +9,12 @@ import GuestTabSwitcher from './app/GuestTabSwitcher';
 import StaffLoginModal from './app/StaffLoginModal';
 import TabRouter from './app/TabRouter';
 import ToastHost from './components/ui/Toast';
-import AddEditReservationModal from './features/reservation-form/AddEditReservationModal';
-import ResumeGroomingModal from './features/resume/ResumeGroomingModal';
 import { useNotificationEngine } from './features/notifications/useNotificationEngine';
 import { Reservation } from './types';
 import { pushToast } from './components/ui/toastStore';
+
+const AddEditReservationModal = lazy(() => import('./features/reservation-form/AddEditReservationModal'));
+const ResumeGroomingModal = lazy(() => import('./features/resume/ResumeGroomingModal'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,9 +26,13 @@ const queryClient = new QueryClient({
   },
 });
 
+const STAFF_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const STAFF_ACTIVITY_KEY = 'jpc_staff_activity_at';
+
 function Shell() {
   const isDarkMode = useAppStore((s) => s.isDarkMode);
   const session = useAppStore((s) => s.session);
+  const currentTab = useAppStore((s) => s.currentTab);
   const { data: config } = useAppConfig();
   const saveReservation = useSaveReservation();
   const addActivityLog = useAddActivityLog();
@@ -66,6 +71,27 @@ function Shell() {
     if (config?.activeTheme) applyBrandTheme(config.activeTheme);
   }, [config?.activeTheme]);
 
+  // Sesi staf berakhir setelah 30 menit tanpa aktivitas. State tetap frontend-only,
+  // tetapi perilakunya setara dengan timeout sesi yang nantinya ditegakkan backend.
+  useEffect(() => {
+    if (!session || currentTab === 'queueDisplay') return;
+    const touch = () => localStorage.setItem(STAFF_ACTIVITY_KEY, String(Date.now()));
+    const events: (keyof WindowEventMap)[] = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
+    touch();
+    events.forEach((event) => window.addEventListener(event, touch, { passive: true }));
+    const timer = window.setInterval(() => {
+      const lastActivity = Number(localStorage.getItem(STAFF_ACTIVITY_KEY) || Date.now());
+      if (Date.now() - lastActivity < STAFF_IDLE_TIMEOUT_MS) return;
+      useAppStore.getState().logoutStaff();
+      localStorage.removeItem(STAFF_ACTIVITY_KEY);
+      pushToast({ tone: 'info', title: 'Sesi staf berakhir', message: 'Tidak ada aktivitas selama 30 menit. Silakan login kembali.' });
+    }, 15_000);
+    return () => {
+      events.forEach((event) => window.removeEventListener(event, touch));
+      window.clearInterval(timer);
+    };
+  }, [currentTab, session]);
+
   const handleSaveReservation = (payload: Reservation) => {
     const isNew = !selectedReservation?.id;
     saveReservation.mutate(payload, {
@@ -95,6 +121,10 @@ function Shell() {
     });
   };
 
+  if (currentTab === 'queueDisplay' && session) {
+    return <TabRouter onOpenStaffLogin={() => setIsStaffLoginOpen(true)} />;
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-slate-100 dark:bg-slate-950">
       {/* Sidebar staf — null saat guest, jadi hanya dirender setelah login */}
@@ -118,13 +148,14 @@ function Shell() {
         </main>
         <footer className="border-t border-slate-200 bg-white px-6 py-4 text-center dark:border-slate-800 dark:bg-slate-900">
           <p className="text-[11px] text-slate-400">
-            JPC Grooming Hub — Sistem Manajemen Pet Care · Phase 1 Rewrite
+            JPC Pet Care Hub — Integrated Clinical & Grooming Operations
           </p>
         </footer>
       </div>
 
       <StaffLoginModal isOpen={isStaffLoginOpen} onClose={() => setIsStaffLoginOpen(false)} />
-      <AddEditReservationModal
+      <Suspense fallback={null}>
+      {isAddModalOpen && <AddEditReservationModal
         isOpen={isAddModalOpen}
         reservation={selectedReservation}
         prefillDate={addPrefill?.date}
@@ -135,15 +166,16 @@ function Shell() {
           setAddPrefill(undefined);
         }}
         onSave={handleSaveReservation}
-      />
-      <ResumeGroomingModal
+      />}
+      {isResumeModalOpen && <ResumeGroomingModal
         isOpen={isResumeModalOpen}
         reservation={resumeReservation}
         onClose={() => {
           setIsResumeModalOpen(false);
           setResumeReservation(null);
         }}
-      />
+      />}
+      </Suspense>
       <ToastHost />
     </div>
   );

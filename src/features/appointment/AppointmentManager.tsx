@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { jsPDF } from 'jspdf';
-import { ArrowLeft, ArrowRight, BedDouble, CalendarRange, CheckCircle2, CircleCheckBig, ClipboardCheck, Clock, FileHeart, ListChecks, MessageCircle, Pencil, Pill, Printer, Search, Stethoscope, Trash2, UserCheck, Wallet, XCircle } from 'lucide-react';
-import { Appointment, AppointmentPet, AppointmentTreatmentItem, ReservationStatus } from '../../types';
+import { ArrowLeft, ArrowRight, BedDouble, CalendarRange, CheckCircle2, CircleCheckBig, ClipboardCheck, Clock, FileHeart, FileUp, ListChecks, Megaphone, MessageCircle, Pencil, Pill, Printer, Search, Stethoscope, Trash2, UserCheck, UserPlus, Wallet, XCircle } from 'lucide-react';
+import { Appointment, AppointmentPet, AppointmentTreatmentItem, ClinicalService, PetType, ReservationStatus } from '../../types';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
-import { Input, Select, Textarea } from '../../components/ui/Input';
+import { Field, Input, Select, Textarea } from '../../components/ui/Input';
 import { StatCard } from '../../components/ui/Section';
 import { useAppointments, useSaveAppointment, useDeleteAppointment, useAddActivityLog, useAddNotificationLog, useAppConfig, useInventory, useSaveInventoryItem } from '../../data-layer/hooks';
 import { useAppStore } from '../../app/store';
-import { formatRupiah, formatDateTimeID, formatDayDateID, todayISO } from '../../lib/format';
+import { formatRupiah, formatDateTimeID, formatDayDateID, generateId, todayISO } from '../../lib/format';
 import { pushToast } from '../../components/ui/toastStore';
 
 type AppointmentStage = 'Pending' | 'Confirmed' | 'In_Progress' | 'Completed' | 'Cancelled';
@@ -42,6 +42,7 @@ export default function AppointmentManager() {
   const [detail, setDetail] = useState<Appointment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Appointment | null>(null);
   const [invoiceAppt, setInvoiceAppt] = useState<Appointment | null>(null);
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   const periodAppointments = useMemo(() => appointments.filter((appointment) => isInPeriod(appointment.date, selectedDate, periodMode)), [appointments, periodMode, selectedDate]);
 
@@ -78,6 +79,9 @@ export default function AppointmentManager() {
   const waiting = periodAppointments.filter((a) => appointmentStage(a) === 'Pending').length;
   const confirmed = periodAppointments.filter((a) => appointmentStage(a) === 'Confirmed').length;
   const inProgress = periodAppointments.filter((a) => appointmentStage(a) === 'In_Progress').length;
+  const nextCallable = appointments
+    .filter((item) => item.date === today && !!item.checkedInAt && !item.calledAt && item.status === 'In_Progress')
+    .sort((a, b) => (a.queueNumber || '').localeCompare(b.queueNumber || ''))[0];
 
   const log = (action: string, targetId: string, targetName: string, details: string) => {
     addActivityLog.mutate({
@@ -155,6 +159,19 @@ export default function AppointmentManager() {
     });
   };
 
+  const callNextQueue = () => {
+    if (!nextCallable) {
+      pushToast({ tone: 'info', title: 'Antrean check-in kosong', message: 'Belum ada pasien yang menunggu untuk dipanggil.' });
+      return;
+    }
+    const updated = { ...nextCallable, calledAt: new Date().toISOString() };
+    saveAppointment.mutate(updated, { onSuccess: () => {
+      log('Panggil Antrean', updated.id, updated.ownerName, `Nomor ${updated.queueNumber} dipanggil ke ruang pemeriksaan`);
+      notifyOwner(updated, 'Appointment_Checked_In', `[WA] Nomor antrean ${updated.queueNumber} untuk ${updated.pets.map((pet) => pet.petName).join(', ')} sedang dipanggil. Silakan menuju ruang pemeriksaan.`);
+      pushToast({ tone: 'success', title: `Memanggil ${updated.queueNumber}`, message: `${updated.pets.map((pet) => pet.petName).join(', ')} • ${updated.ownerName}` });
+    }});
+  };
+
   const referToInpatient = (appt: Appointment, petIndex: number) => {
     saveAppointment.mutate(appt, {
       onSuccess: () => {
@@ -211,7 +228,7 @@ export default function AppointmentManager() {
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-950/30"><ClipboardCheck size={20} /></div>
             <div><h2 className="font-display text-base font-bold">Command Center Layanan Klinik</h2><p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-white/65">Verifikasi booking, check-in antrean, pemeriksaan, rekam medis, billing, dan handoff Rawat Inap dalam satu alur.</p></div>
           </div>
-          <div className="flex flex-wrap gap-2"><Badge tone="amber"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" /> {waiting} perlu verifikasi</Badge><Badge tone="emerald"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Notifikasi aktif</Badge></div>
+          <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => setWalkInOpen(true)}><UserPlus size={13} /> Walk-in</Button><Button size="sm" onClick={callNextQueue}><Megaphone size={13} /> {nextCallable ? `Panggil ${nextCallable.queueNumber}` : 'Panggil Berikutnya'}</Button><Badge tone="amber"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" /> {waiting} perlu verifikasi</Badge></div>
         </div>
       </Card>
 
@@ -278,6 +295,7 @@ export default function AppointmentManager() {
                       <h4 className="font-display text-sm font-bold text-slate-900 dark:text-white">{appt.ownerName}</h4>
                       <StageBadge stage={stage} />
                       {appt.queueNumber && <Badge tone="sky"><ListChecks size={10} /> Antrean {appt.queueNumber}</Badge>}
+                      {appt.calledAt && <Badge tone="emerald"><Megaphone size={10} /> Dipanggil {formatDateTimeID(appt.calledAt).split(', ')[1]}</Badge>}
                       {appt.status !== 'Cancelled' && (
                         appt.billClosed
                           ? <Badge tone="emerald">🟢 Lunas {formatRupiah(billTotal(appt))}</Badge>
@@ -339,6 +357,7 @@ export default function AppointmentManager() {
 
       {/* Invoice print */}
       <InvoiceModal appointment={invoiceAppt} onClose={() => setInvoiceAppt(null)} />
+      <WalkInModal open={walkInOpen} appointments={appointments} doctors={config?.doctors ?? []} services={config?.clinicalServices ?? []} onClose={() => setWalkInOpen(false)} onSave={(appointment) => saveAppointment.mutate(appointment, { onSuccess: () => { log('Tambah Walk-in', appointment.id, appointment.ownerName, `Nomor antrean ${appointment.queueNumber}`); setWalkInOpen(false); pushToast({ tone: 'success', title: `Walk-in ${appointment.queueNumber}`, message: 'Pasien langsung masuk antrean pemeriksaan.' }); } })} />
 
       <ConfirmDialog
         isOpen={!!deleteTarget}
@@ -364,6 +383,13 @@ function billTotal(appt: Appointment): number {
     (sum, pet) => sum + pet.treatments.reduce((s, t) => s + t.subtotal, 0),
     0
   );
+}
+
+function WalkInModal({ open, appointments, doctors, services, onClose, onSave }: { open: boolean; appointments: Appointment[]; doctors: string[]; services: ClinicalService[]; onClose: () => void; onSave: (appointment: Appointment) => void }) {
+  const [ownerName, setOwnerName] = useState(''); const [ownerPhone, setOwnerPhone] = useState(''); const [petName, setPetName] = useState(''); const [petType, setPetType] = useState<PetType>('Kucing'); const [petBreed, setPetBreed] = useState(''); const [doctorName, setDoctorName] = useState(doctors[0] || ''); const [serviceName, setServiceName] = useState(services[0]?.name || ''); const [complaint, setComplaint] = useState(''); const [error, setError] = useState('');
+  if (!open) return null;
+  const submit = () => { if (!ownerName.trim() || !ownerPhone.trim() || !petName.trim() || !doctorName || !complaint.trim()) { setError('Pemilik, WhatsApp, pasien, dokter, dan keluhan wajib diisi.'); return; } const now = new Date().toISOString(); const service = services.find((item) => item.name === serviceName); onSave({ id: generateId('APT-WI'), ownerName: ownerName.trim(), ownerPhone: ownerPhone.trim(), date: todayISO(), timeSlot: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }), doctorName, service, accommodation: 'Walk-in', pets: [{ petName: petName.trim(), petType, petBreed: petBreed.trim() || '-', reasons: ['Walk-in'], conditionStory: complaint.trim(), complaints: [], preVisitAnswers: [], treatments: [] }], status: 'In_Progress', confirmedAt: now, checkedInAt: now, queueNumber: nextQueueNumber(appointments, todayISO()), notes: 'Registrasi walk-in oleh staf.', createdAt: now }); };
+  return <Modal isOpen={open} onClose={onClose} title="Registrasi Walk-in" subtitle="Pasien langsung check-in dan memperoleh nomor antrean" icon={<UserPlus size={18} />} size="lg" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit}>Masukkan Antrean</Button></>}><div className="space-y-4"><div className="grid gap-3 md:grid-cols-2"><Field label="Nama Pemilik" required><Input value={ownerName} onChange={(event) => setOwnerName(event.target.value)} /></Field><Field label="Nomor WhatsApp" required><Input value={ownerPhone} onChange={(event) => setOwnerPhone(event.target.value)} /></Field><Field label="Nama Pasien" required><Input value={petName} onChange={(event) => setPetName(event.target.value)} /></Field><Field label="Jenis Hewan"><Select value={petType} onChange={(event) => setPetType(event.target.value as PetType)}>{['Kucing', 'Anjing', 'Kelinci', 'Lainnya'].map((item) => <option key={item}>{item}</option>)}</Select></Field><Field label="Ras"><Input value={petBreed} onChange={(event) => setPetBreed(event.target.value)} /></Field><Field label="Dokter" required><Select value={doctorName} onChange={(event) => setDoctorName(event.target.value)}><option value="">Pilih dokter</option>{doctors.map((item) => <option key={item}>{item}</option>)}</Select></Field><Field label="Layanan"><Select value={serviceName} onChange={(event) => setServiceName(event.target.value)}><option value="">Pemeriksaan umum</option>{services.map((item) => <option key={item.name}>{item.name}</option>)}</Select></Field></div><Field label="Keluhan Utama" required><Textarea value={complaint} onChange={(event) => setComplaint(event.target.value)} placeholder="Ceritakan kondisi pasien secara singkat…" /></Field>{error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600">{error}</p>}</div></Modal>;
 }
 
 // ================== DETAIL MODAL ==================
@@ -442,6 +468,20 @@ function AppointmentDetailModal({
             }
       ),
     });
+  };
+
+  const updateTreatment = (petIndex: number, treatmentId: string, patch: Partial<AppointmentTreatmentItem>) => {
+    updatePet(petIndex, 'treatments', draft.pets[petIndex].treatments.map((item) => item.id === treatmentId ? { ...item, ...patch } : item));
+  };
+
+  const addDocument = async (petIndex: number, file: File) => {
+    if (file.size > 3 * 1024 * 1024) {
+      pushToast({ tone: 'error', title: 'Lampiran terlalu besar', message: 'Maksimal 3 MB per berkas untuk penyimpanan frontend.' });
+      return;
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    const documents = draft.pets[petIndex].documents ?? [];
+    updatePet(petIndex, 'documents', [...documents, { id: generateId('DOC'), name: file.name, kind: file.type === 'application/pdf' ? 'Laboratorium' : 'Pemeriksaan', mimeType: file.type, dataUrl, uploadedAt: new Date().toISOString() }]);
   };
 
   const total = billTotal(draft);
@@ -524,6 +564,16 @@ function AppointmentDetailModal({
               </div>
             )}
 
+            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50/40 p-3 dark:border-sky-900 dark:bg-sky-950/20">
+              <p className="mb-3 text-[10px] font-bold tracking-wide text-sky-700 uppercase dark:text-sky-300">Pemeriksaan Fisik & Vital</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Field label="Berat (kg)"><Input type="number" step="0.1" min="0" value={pet.examination?.weight ?? ''} onChange={(event) => updatePet(idx, 'examination', { ...pet.examination, weight: Number(event.target.value) || undefined })} /></Field>
+                <Field label="Suhu (°C)"><Input type="number" step="0.1" min="30" max="45" value={pet.examination?.temperature ?? ''} onChange={(event) => updatePet(idx, 'examination', { ...pet.examination, temperature: Number(event.target.value) || undefined })} /></Field>
+                <Field label="Turgor / Hidrasi"><Input value={pet.examination?.turgor || ''} onChange={(event) => updatePet(idx, 'examination', { ...pet.examination, turgor: event.target.value })} placeholder="Normal / dehidrasi ringan…" /></Field>
+              </div>
+              <Field label="Temuan Pemeriksaan Fisik" className="mt-3"><Textarea value={pet.examination?.physicalExam || ''} onChange={(event) => updatePet(idx, 'examination', { ...pet.examination, physicalExam: event.target.value })} placeholder="Mukosa, auskultasi, palpasi, kondisi kulit, dan temuan klinis lain…" /></Field>
+            </div>
+
             {/* Diagnosis */}
             <div className="mt-3">
               <label className="mb-1 block text-xs font-bold text-brand-700 dark:text-brand-300">
@@ -545,7 +595,8 @@ function AppointmentDetailModal({
               {pet.treatments.length > 0 && (
                 <div className="mb-2 space-y-1">
                   {pet.treatments.map((t) => (
-                    <div key={t.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900">
+                    <div key={t.id} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900">
+                      <div className="flex items-center gap-2">
                       <Badge tone={t.type === 'obat' ? 'emerald' : t.type === 'tindakan' ? 'brand' : 'sky'}>{t.type}</Badge>
                       <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700 dark:text-slate-200">
                         {t.name} <span className="font-normal text-slate-400">({formatRupiah(t.price)})</span>
@@ -563,6 +614,8 @@ function AppointmentDetailModal({
                       >
                         🗑
                       </button>
+                      </div>
+                      {t.type === 'obat' && <div className="mt-2 grid gap-2 sm:grid-cols-2"><Input value={t.dosage || ''} onChange={(event) => updateTreatment(idx, t.id, { dosage: event.target.value })} placeholder="Dosis: 2x sehari" className="text-[11px]" /><Input value={t.notes || ''} onChange={(event) => updateTreatment(idx, t.id, { notes: event.target.value })} placeholder="Sesudah makan / instruksi lain" className="text-[11px]" /></div>}
                     </div>
                   ))}
                 </div>
@@ -598,6 +651,10 @@ function AppointmentDetailModal({
                     </button>
                   ))}
               </div>
+            </div>
+            <div className="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">Dokumentasi Medis</p><p className="text-[10px] text-slate-400">Foto pemeriksaan, hasil lab, radiologi, atau PDF.</p></div><label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><FileUp size={13} /> Unggah<input type="file" accept="image/*,application/pdf" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void addDocument(idx, file); event.target.value = ''; }} /></label></div>
+              {(pet.documents?.length ?? 0) > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{pet.documents!.map((document) => <div key={document.id} className="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/60"><a href={document.dataUrl} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-xs font-semibold text-brand-700 dark:text-brand-300">{document.name}</a><Select value={document.kind} onChange={(event) => updatePet(idx, 'documents', pet.documents!.map((item) => item.id === document.id ? { ...item, kind: event.target.value as typeof item.kind } : item))} className="max-w-32 text-[10px]"><option>Pemeriksaan</option><option>Laboratorium</option><option>Radiologi</option><option>Lainnya</option></Select><button type="button" onClick={() => updatePet(idx, 'documents', pet.documents!.filter((item) => item.id !== document.id))} className="text-rose-500"><Trash2 size={13} /></button></div>)}</div>}
             </div>
           </div>
         ))}
@@ -875,6 +932,15 @@ function nextQueueNumber(appointments: Appointment[], date: string): string {
   return `A-${String(max + 1).padStart(3, '0')}`;
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Gagal membaca berkas.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function waNumber(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
@@ -910,8 +976,11 @@ function printMedicalResume(appointment: Appointment, petIndex: number) {
   y += 3;
   const sections = [
     ['Keluhan / Anamnesa', pet.conditionStory || '-'],
+    ['Vital', `Berat ${pet.examination?.weight ?? '-'} kg • Suhu ${pet.examination?.temperature ?? '-'}°C • Turgor ${pet.examination?.turgor || '-'}`],
+    ['Pemeriksaan Fisik', pet.examination?.physicalExam || '-'],
     ['Diagnosis', pet.diagnosis || 'Belum diisi'],
-    ['Tindakan & Obat', pet.treatments.length ? pet.treatments.map((item) => `${item.name} x${item.quantity}`).join(', ') : 'Belum ada tindakan atau obat'],
+    ['Tindakan & Obat', pet.treatments.length ? pet.treatments.map((item) => `${item.name} x${item.quantity}${item.dosage ? ` — ${item.dosage}` : ''}${item.notes ? ` (${item.notes})` : ''}`).join(', ') : 'Belum ada tindakan atau obat'],
+    ['Lampiran', pet.documents?.length ? pet.documents.map((item) => `${item.kind}: ${item.name}`).join(', ') : 'Tidak ada lampiran'],
     ['Catatan', appointment.notes || '-'],
   ];
   sections.forEach(([label, value]) => { doc.setFont('helvetica', 'bold'); doc.text(label, left, y); y += 5; doc.setFont('helvetica', 'normal'); const lines = doc.splitTextToSize(String(value), 174); doc.text(lines, left, y); y += lines.length * 5 + 5; });

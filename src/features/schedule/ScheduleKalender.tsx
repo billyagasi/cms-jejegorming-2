@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Plus, PawPrint } from 'lucide-react';
+import { BellRing, Calendar, ChevronLeft, ChevronRight, Clock, HeartPulse, Plus, Scissors, Stethoscope, Syringe } from 'lucide-react';
 import { Reservation } from '../../types';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
-import { useAppConfig, useReservations } from '../../data-layer/hooks';
+import { useAppConfig, useAppointments, useClinicalFollowUps, useReservations, useSurgeries, useVaccinations } from '../../data-layer/hooks';
 import { useAppStore } from '../../app/store';
 import { MONTHS_ID, DAYS_ID, formatDayDateID } from '../../lib/format';
 
@@ -17,7 +17,15 @@ interface ScheduleKalenderProps {
   onOpenAddWithSlot: (date: string, slot: string) => void;
 }
 
-export default function ScheduleKalender({ onOpenEditReservation, onOpenResume, onOpenAddWithSlot }: ScheduleKalenderProps) {
+export default function ScheduleKalender(props: ScheduleKalenderProps) {
+  const [mode, setMode] = useState<'grooming' | 'clinical'>('grooming');
+  return <div className="space-y-4">
+    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-display text-base font-bold text-slate-900 dark:text-white">Kalender Operasional</h2><p className="text-[11px] text-slate-500">Kapasitas grooming dan agenda klinis tanpa menu kalender terpisah.</p></div><div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800"><button type="button" onClick={() => setMode('grooming')} className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-bold ${mode === 'grooming' ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-700 dark:text-brand-300' : 'text-slate-500'}`}><Scissors size={14} /> Grooming</button><button type="button" onClick={() => setMode('clinical')} className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-bold ${mode === 'clinical' ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-700 dark:text-brand-300' : 'text-slate-500'}`}><Stethoscope size={14} /> Klinis</button></div></div>
+    {mode === 'grooming' ? <GroomingSchedule {...props} /> : <ClinicalSchedule />}
+  </div>;
+}
+
+function GroomingSchedule({ onOpenEditReservation, onOpenResume, onOpenAddWithSlot }: ScheduleKalenderProps) {
   const { data: reservations = [] } = useReservations();
   const { data: config } = useAppConfig();
   const setTab = useAppStore((s) => s.setTab);
@@ -200,4 +208,25 @@ export default function ScheduleKalender({ onOpenEditReservation, onOpenResume, 
       </Card>
     </div>
   );
+}
+
+function ClinicalSchedule() {
+  const { data: appointments = [] } = useAppointments();
+  const { data: surgeries = [] } = useSurgeries();
+  const { data: vaccinations = [] } = useVaccinations();
+  const { data: followUps = [] } = useClinicalFollowUps();
+  const setTab = useAppStore((state) => state.setTab);
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const days = useMemo(() => { const base = new Date(`${todayIso}T00:00:00`); base.setDate(base.getDate() + weekOffset * 7 - 3); return Array.from({ length: 7 }, (_, index) => { const date = new Date(base); date.setDate(base.getDate() + index); const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; return { iso, dayName: DAYS_ID[date.getDay()], dayNum: date.getDate() }; }); }, [todayIso, weekOffset]);
+  const eventsFor = (date: string) => [
+    ...appointments.filter((item) => item.date === date && item.status !== 'Cancelled').map((item) => ({ id: item.id, type: 'Appointment', title: item.pets.map((pet) => pet.petName).join(', '), subtitle: `${item.timeSlot} • ${item.doctorName || 'Dokter belum dipilih'}`, tone: 'sky' as const, tab: 'queue' as const })),
+    ...surgeries.filter((item) => item.date === date && item.status !== 'Dibatalkan').map((item) => ({ id: item.id, type: 'Operasi', title: item.patient.petName, subtitle: `${item.time} • ${item.procedureName}`, tone: 'rose' as const, tab: 'surgeries' as const })),
+    ...vaccinations.filter((item) => item.nextDueDate === date && item.status !== 'Dibatalkan').map((item) => ({ id: item.id, type: 'Booster', title: item.patient.petName, subtitle: item.vaccineName, tone: 'emerald' as const, tab: 'vaccinations' as const })),
+    ...followUps.filter((item) => item.followUpDate === date && item.status === 'Pending').map((item) => ({ id: item.id, type: 'Follow-up', title: item.patient.petName, subtitle: item.sourceType, tone: 'amber' as const, tab: 'reminder' as const })),
+  ];
+  const selectedEvents = eventsFor(selectedDate);
+  return <div className="space-y-4"><Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-display text-sm font-bold text-slate-800 dark:text-slate-100">Agenda Klinik Terpadu</h3><p className="text-[11px] text-slate-500">Appointment, operasi, booster, dan follow-up.</p></div><div className="flex gap-1.5"><Button variant="secondary" size="icon" onClick={() => setWeekOffset((value) => value - 1)}><ChevronLeft size={14} /></Button><Button variant="secondary" size="sm" onClick={() => { setWeekOffset(0); setSelectedDate(todayIso); }}>Hari Ini</Button><Button variant="secondary" size="icon" onClick={() => setWeekOffset((value) => value + 1)}><ChevronRight size={14} /></Button></div></div><div className="grid grid-cols-7 gap-1.5">{days.map((day) => { const count = eventsFor(day.iso).length; const selected = day.iso === selectedDate; return <button key={day.iso} onClick={() => setSelectedDate(day.iso)} className={`rounded-xl border px-1 py-2.5 text-center ${selected ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 dark:border-slate-800'}`}><span className="block text-[9px] font-bold uppercase opacity-70">{day.dayName}</span><span className="mt-1 block text-lg font-bold">{day.dayNum}</span><span className="block text-[9px] opacity-70">{count ? `${count} agenda` : 'Kosong'}</span></button>; })}</div></Card><Card><div className="mb-4 flex items-center justify-between"><div><h3 className="font-display text-sm font-bold">{formatDayDateID(selectedDate)}</h3><p className="text-[11px] text-slate-500">{selectedEvents.length} agenda klinis</p></div><Button size="sm" onClick={() => setTab('appointment')}><Plus size={13} /> Appointment</Button></div>{selectedEvents.length === 0 ? <EmptyState icon={<Calendar size={22} />} title="Tidak ada agenda klinis" description="Pilih tanggal lain atau buat appointment baru." /> : <div className="grid gap-2 md:grid-cols-2">{selectedEvents.map((event) => <button key={`${event.type}-${event.id}`} onClick={() => setTab(event.tab)} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-left hover:border-brand-400 dark:border-slate-800"><span className={`flex h-9 w-9 items-center justify-center rounded-lg ${event.tone === 'rose' ? 'bg-rose-50 text-rose-600' : event.tone === 'emerald' ? 'bg-emerald-50 text-emerald-600' : event.tone === 'amber' ? 'bg-amber-50 text-amber-600' : 'bg-sky-50 text-sky-600'}`}>{event.type === 'Operasi' ? <HeartPulse size={16} /> : event.type === 'Booster' ? <Syringe size={16} /> : event.type === 'Follow-up' ? <BellRing size={16} /> : <Stethoscope size={16} />}</span><span className="min-w-0 flex-1"><span className="block text-xs font-bold">{event.title}</span><span className="block truncate text-[10px] text-slate-500">{event.subtitle}</span></span><Badge tone={event.tone}>{event.type}</Badge></button>)}</div>}</Card></div>;
 }

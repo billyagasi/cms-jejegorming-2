@@ -1,21 +1,30 @@
 import { useMemo, useState } from 'react';
-import { MessageSquare, Search, Copy, Trash2, CheckCheck } from 'lucide-react';
+import { MessageSquare, Search, Copy, Trash2, CheckCheck, Plus, Send } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
-import { Input } from '../../components/ui/Input';
-import { useNotificationLogs, useClearNotificationLogs } from '../../data-layer/hooks';
-import { copyToClipboard, formatDateTimeID } from '../../lib/format';
+import Modal from '../../components/ui/Modal';
+import { Field, Input, Select, Textarea } from '../../components/ui/Input';
+import { useAddNotificationLog, useAppointments, useClearNotificationLogs, useInpatients, useNotificationLogs, useReservations } from '../../data-layer/hooks';
+import { copyToClipboard, formatDateTimeID, generateId, waLink } from '../../lib/format';
 import { pushToast } from '../../components/ui/toastStore';
+import { buildClinicalPatients } from '../clinical/clinicalPatients';
+import type { NotificationLog } from '../../types';
 
 export default function NotificationLogDashboard() {
   const { data: logs = [] } = useNotificationLogs();
   const clearLogs = useClearNotificationLogs();
+  const addLog = useAddNotificationLog();
+  const { data: appointments = [] } = useAppointments();
+  const { data: reservations = [] } = useReservations();
+  const { data: inpatients = [] } = useInpatients();
+  const patients = useMemo(() => buildClinicalPatients(appointments, reservations, inpatients), [appointments, reservations, inpatients]);
   const [search, setSearch] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [copiedId, setCopiedId] = useState('');
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -38,9 +47,9 @@ export default function NotificationLogDashboard() {
           <div>
             <h3 className="font-display flex items-center gap-2 text-sm font-bold text-white">
               <MessageSquare size={15} className="text-brand-300" />
-              Log Notifikasi WhatsApp (Simulasi)
+              Notification Center
             </h3>
-            <p className="mt-0.5 text-[11px] text-slate-400">Riwayat pesan notifikasi yang dikirim sistem kepada pemilik hewan</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">Pesan otomatis dan manual melalui WhatsApp, SMS, atau email</p>
           </div>
           <div className="flex gap-2">
             <Badge tone="brand">{logs.length} Total</Badge>
@@ -58,6 +67,7 @@ export default function NotificationLogDashboard() {
           <Button variant="outline-danger" size="sm" onClick={() => setConfirmOpen(true)}>
             <Trash2 size={13} /> Reset Riwayat Log
           </Button>
+          <Button size="sm" onClick={() => setComposeOpen(true)}><Plus size={13} /> Pesan Manual</Button>
         </div>
 
         {filtered.length === 0 ? (
@@ -77,8 +87,8 @@ export default function NotificationLogDashboard() {
                     <Badge tone={log.type === 'Grooming_Completed' ? 'emerald' : log.type === 'Reservation_Created' ? 'brand' : 'sky'}>
                       {log.type.replaceAll('_', ' ')}
                     </Badge>
-                    <Badge tone="emerald">
-                      <CheckCheck size={10} /> Delivered
+                    <Badge tone={log.status === 'Failed' ? 'rose' : log.status === 'Pending' ? 'amber' : 'emerald'}>
+                      <CheckCheck size={10} /> {log.channel} • {log.status}
                     </Badge>
                   </div>
                 </div>
@@ -107,6 +117,8 @@ export default function NotificationLogDashboard() {
         )}
       </Card>
 
+      <ComposeNotificationModal open={composeOpen} patients={patients} onClose={() => setComposeOpen(false)} onSend={(log) => addLog.mutate(log, { onSuccess: () => { setComposeOpen(false); pushToast({ tone: 'success', title: 'Notifikasi dicatat', message: `${log.channel} untuk ${log.ownerName}` }); } })} />
+
       <ConfirmDialog
         isOpen={confirmOpen}
         onClose={() => setConfirmOpen(false)}
@@ -123,4 +135,14 @@ export default function NotificationLogDashboard() {
       />
     </div>
   );
+}
+
+function ComposeNotificationModal({ open, patients, onClose, onSend }: { open: boolean; patients: ReturnType<typeof buildClinicalPatients>; onClose: () => void; onSend: (log: NotificationLog) => void }) {
+  const [patientKey, setPatientKey] = useState(patients[0]?.key || '');
+  const [channel, setChannel] = useState<NotificationLog['channel']>('WhatsApp');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  if (!open) return null;
+  const submit = () => { const patient = patients.find((item) => item.key === patientKey); if (!patient || !message.trim()) { setError('Pilih pasien dan isi pesan.'); return; } if (channel === 'WhatsApp') window.open(waLink(patient.ownerPhone, message), '_blank'); else if (channel === 'SMS') window.open(`sms:${patient.ownerPhone}?body=${encodeURIComponent(message)}`, '_blank'); else window.open(`mailto:?subject=${encodeURIComponent(`Informasi ${patient.petName} — Jeje Pet Care`)}&body=${encodeURIComponent(message)}`, '_blank'); onSend({ id: generateId('notif'), reservationId: patient.appointmentId || patient.key, petName: patient.petName, ownerName: patient.ownerName, ownerPhone: patient.ownerPhone, type: 'Manual', message: message.trim(), timestamp: new Date().toISOString(), channel, status: 'Sent' }); };
+  return <Modal isOpen={open} onClose={onClose} title="Kirim Notifikasi Manual" subtitle="Pengiriman membuka aplikasi channel terkait; log tetap tersimpan di CMS" icon={<Send size={18} />} size="md" footer={<><Button variant="secondary" onClick={onClose}>Batal</Button><Button onClick={submit}><Send size={13} /> Kirim</Button></>}><div className="space-y-4"><Field label="Pasien / Pemilik" required><Select value={patientKey} onChange={(event) => setPatientKey(event.target.value)}><option value="">Pilih pasien</option>{patients.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</Select></Field><Field label="Channel"><Select value={channel} onChange={(event) => setChannel(event.target.value as NotificationLog['channel'])}><option>WhatsApp</option><option>SMS</option><option>Email</option></Select></Field><Field label="Pesan" required><Textarea rows={6} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Tulis pesan untuk pemilik…" /></Field>{error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600">{error}</p>}</div></Modal>;
 }

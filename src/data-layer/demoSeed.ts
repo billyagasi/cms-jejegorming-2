@@ -8,6 +8,9 @@ import {
   StepStatus,
   Appointment,
   Inpatient,
+  Surgery,
+  VaccinationRecord,
+  ClinicalFollowUp,
 } from '../types';
 
 /**
@@ -716,6 +719,43 @@ export function buildDemoInpatients(): Inpatient[] {
   ];
 }
 
+export function buildDemoSurgeries(): Surgery[] {
+  return [{
+    id: 'demo-op-001',
+    patient: { petName: 'Bona', petType: 'Anjing', petBreed: 'Poodle Toy', ownerName: 'Ibu Santi', ownerPhone: '081398765432', appointmentId: 'demo-appt-001', appointmentPetIndex: 0 },
+    procedureName: 'Sterilisasi / Ovariohisterektomi', date: daysFromNow(2), time: '10:00',
+    surgeonName: 'drh. Ratna Wijaya', assistantDoctorName: 'drh. Bimo Prasetyo', urgency: 'Rutin', status: 'Direncanakan',
+    preOpDiagnosis: 'Kondisi umum stabil; kandidat operasi elektif setelah evaluasi darah praoperasi.',
+    anesthesiaNotes: 'Protokol anestesi disesuaikan dengan hasil pemeriksaan praoperasi.', procedureNotes: '',
+    resourceItems: [], createdAt: isoAt(-1, 13, 0), updatedAt: isoAt(-1, 13, 0),
+  }];
+}
+
+export function buildDemoVaccinations(): VaccinationRecord[] {
+  return [{
+    id: 'demo-vac-001',
+    patient: { petName: 'Leo', petType: 'Kucing', petBreed: 'British Shorthair', ownerName: 'Kak Joni', ownerPhone: '081234567890', appointmentId: 'demo-appt-002', appointmentPetIndex: 0 },
+    vaccineName: 'Nobivac Tricat Trio', vaccineType: 'Booster', givenDate: daysFromNow(-335), nextDueDate: daysFromNow(30),
+    veterinarianName: 'drh. Salsabila Putri', batchNumber: 'NTT-2608-A17', status: 'Perlu Booster',
+    notes: 'Tidak ada reaksi pascavaksin yang dilaporkan.', createdAt: isoAt(-335, 11, 0), updatedAt: isoAt(-335, 11, 0),
+  }];
+}
+
+export function buildDemoClinicalFollowUps(): ClinicalFollowUp[] {
+  const vaccination = buildDemoVaccinations()[0];
+  return [{
+    id: `FU-VAC-${vaccination.id}`, patient: vaccination.patient, sourceType: 'Vaksinasi', sourceId: vaccination.id,
+    followUpDate: vaccination.nextDueDate!, status: 'Pending', staffInCharge: vaccination.veterinarianName,
+    lastCondition: `Vaksin ${vaccination.vaccineName} diberikan ${vaccination.givenDate}.`, recommendedAction: `Booster/kontrol ${vaccination.vaccineName}.`,
+    contactChannel: 'WhatsApp', createdAt: vaccination.createdAt, updatedAt: vaccination.updatedAt,
+  }, {
+    id: 'demo-fu-002', patient: { petName: 'Bona', petType: 'Anjing', petBreed: 'Poodle Toy', ownerName: 'Ibu Santi', ownerPhone: '081398765432', appointmentId: 'demo-appt-001', appointmentPetIndex: 0 },
+    sourceType: 'Rawat Inap', sourceId: 'demo-inp-001', followUpDate: daysFromNow(1), status: 'Pending', staffInCharge: 'drh. Ratna Wijaya',
+    lastCondition: 'Kondisi membaik setelah terapi cairan dan diet gastrointestinal.', recommendedAction: 'Konfirmasi nafsu makan, muntah, dan pola BAB setelah pulang.',
+    contactChannel: 'WhatsApp', createdAt: isoAt(0, 9, 0), updatedAt: isoAt(0, 9, 0),
+  }];
+}
+
 /** Jalankan seluruh seeding demo ke localStorage. */
 export function seedDemoDataToStorage(write: (key: string, value: unknown) => void): void {
   write('jeje_cached_reservations', buildDemoReservations());
@@ -725,4 +765,7 @@ export function seedDemoDataToStorage(write: (key: string, value: unknown) => vo
   write('jeje_cached_activityLogs', buildDemoActivity());
   write('jpc_appointments', buildDemoAppointments());
   write('jpc_inpatients', buildDemoInpatients());
+  write('jpc_surgeries', buildDemoSurgeries());
+  write('jpc_vaccinations', buildDemoVaccinations());
+  write('jpc_clinical_follow_ups', buildDemoClinicalFollowUps());
 }

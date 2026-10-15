@@ -8,6 +8,9 @@ import {
   WhatsAppTemplate,
   Appointment,
   Inpatient,
+  Surgery,
+  VaccinationRecord,
+  ClinicalFollowUp,
 } from '../types';
 
 /**
@@ -31,6 +34,21 @@ export interface AppRepository {
   getInpatients(): Promise<Inpatient[]>;
   saveInpatient(inpatient: Inpatient): Promise<void>;
   deleteInpatient(id: string): Promise<void>;
+
+  // Operasi / bedah
+  getSurgeries(): Promise<Surgery[]>;
+  saveSurgery(surgery: Surgery): Promise<void>;
+  deleteSurgery(id: string): Promise<void>;
+
+  // Vaksinasi
+  getVaccinations(): Promise<VaccinationRecord[]>;
+  saveVaccination(record: VaccinationRecord): Promise<void>;
+  deleteVaccination(id: string): Promise<void>;
+
+  // Follow-up klinis
+  getClinicalFollowUps(): Promise<ClinicalFollowUp[]>;
+  saveClinicalFollowUp(followUp: ClinicalFollowUp): Promise<void>;
+  deleteClinicalFollowUp(id: string): Promise<void>;
 
   // Log notifikasi WhatsApp
   getNotificationLogs(): Promise<NotificationLog[]>;

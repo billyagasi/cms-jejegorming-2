@@ -13,7 +13,10 @@ import {
   History,
   Stethoscope,
   BedDouble,
+  HeartPulse,
+  Syringe,
   SearchCheck,
+  MonitorPlay,
   type LucideIcon,
 } from 'lucide-react';
 import type { TabId } from '../app/store';
@@ -42,9 +45,11 @@ export const TAB_GROUPS: TabGroup[] = [
   {
     label: 'Antrean & Proses',
     tabs: [
-      { id: 'queue', label: 'Antrean', icon: ListChecks },
-      { id: 'appointments', label: 'Appointment Klinik', icon: Stethoscope },
+      { id: 'queue', label: 'Command Center', icon: ListChecks },
+      { id: 'queueDisplay', label: 'Layar Antrean TV', icon: MonitorPlay },
       { id: 'inpatients', label: 'Rawat Inap', icon: BedDouble },
+      { id: 'surgeries', label: 'Operasi & Bedah', icon: HeartPulse },
+      { id: 'vaccinations', label: 'Vaksinasi', icon: Syringe },
       { id: 'steps', label: 'Tindakan (5-Step)', icon: Layers },
       { id: 'scheduler', label: 'Kalender Sesi', icon: Calendar },
       { id: 'reminder', label: 'Reminder', icon: BellRing },
@@ -54,7 +59,7 @@ export const TAB_GROUPS: TabGroup[] = [
     label: 'Rekam Medis',
     tabs: [
       { id: 'profile', label: 'Rekam & Profil', icon: BookOpen },
-      { id: 'logs', label: 'Log WhatsApp', icon: MessageSquare },
+      { id: 'logs', label: 'Notification Center', icon: MessageSquare },
     ],
   },
   {

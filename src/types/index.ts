@@ -82,7 +82,8 @@ export type NotificationLogType =
   | 'Appointment_Checked_In'
   | 'Step_Update'
   | 'Grooming_Completed'
-  | 'Rescheduled';
+  | 'Rescheduled'
+  | 'Manual';
 
 export interface NotificationLog {
   id: string;
@@ -94,8 +95,8 @@ export interface NotificationLog {
   stepName?: string;
   message: string;
   timestamp: string;
-  channel: 'WhatsApp' | 'SMS';
-  status: 'Sent' | 'Delivered';
+  channel: 'WhatsApp' | 'SMS' | 'Email';
+  status: 'Pending' | 'Sent' | 'Delivered' | 'Failed';
 }
 
 export interface RoleAccount {
@@ -222,6 +223,18 @@ export interface AppointmentTreatmentItem {
   subtotal: number;
   /** Link ke Inventaris — stok berkurang saat Tutup Bill */
   itemId?: string;
+  /** Aturan pakai resep, contoh 2x sehari sesudah makan. */
+  dosage?: string;
+  notes?: string;
+}
+
+export interface ClinicalDocument {
+  id: string;
+  name: string;
+  kind: 'Pemeriksaan' | 'Laboratorium' | 'Radiologi' | 'Lainnya';
+  mimeType: string;
+  dataUrl: string;
+  uploadedAt: string;
 }
 
 /** Material grooming yang terpakai — stok Inventaris berkurang via delta */
@@ -249,6 +262,13 @@ export interface AppointmentPet {
   preVisitAnswers: { question: string; answer: string }[];
   /** Diagnosis dokter (diisi staf saat penanganan) */
   diagnosis?: string;
+  examination?: {
+    weight?: number;
+    temperature?: number;
+    turgor?: string;
+    physicalExam?: string;
+  };
+  documents?: ClinicalDocument[];
   /** Tindakan & obat yang diberikan (membentuk bill) */
   treatments: AppointmentTreatmentItem[];
 }
@@ -280,6 +300,8 @@ export interface Appointment {
   /** Tahap operasional appointment tanpa mengubah status bersama milik grooming. */
   confirmedAt?: string;
   checkedInAt?: string;
+  /** Waktu nomor antrean dipanggil oleh petugas. */
+  calledAt?: string;
   completedAt?: string;
   /** Nomor antrean klinik yang diberikan saat check-in. */
   queueNumber?: string;
@@ -343,6 +365,91 @@ export interface Inpatient {
   doctorName: string;
   emergencyContact: string;
   dailyNotes: InpatientNote[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- Operasi, vaksinasi, dan tindak lanjut klinis ---
+
+export interface ClinicalPatientSnapshot {
+  petName: string;
+  petType: PetType;
+  petBreed?: string;
+  ownerName: string;
+  ownerPhone: string;
+  appointmentId?: string;
+  appointmentPetIndex?: number;
+}
+
+export type SurgeryStatus = 'Direncanakan' | 'Berlangsung' | 'Selesai' | 'Masa Pemulihan' | 'Dibatalkan';
+
+export interface SurgeryResourceItem {
+  itemId?: string;
+  name: string;
+  category: 'Tindakan' | 'Anestesi' | 'BMHP';
+  quantity: number;
+  unit?: string;
+  price: number;
+}
+
+export interface Surgery {
+  id: string;
+  patient: ClinicalPatientSnapshot;
+  procedureName: string;
+  date: string;
+  time: string;
+  surgeonName: string;
+  assistantDoctorName?: string;
+  nonDoctorAssistant?: string;
+  urgency: 'Rutin' | 'Mendesak' | 'Darurat';
+  status: SurgeryStatus;
+  preOpDiagnosis?: string;
+  anesthesiaNotes?: string;
+  procedureNotes?: string;
+  recoveryNotes?: string;
+  resourceItems: SurgeryResourceItem[];
+  photos?: { premedication?: string; surgery?: string; recovery?: string };
+  inventoryCommittedAt?: string;
+  inpatientId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type VaccinationStatus = 'Aktif' | 'Perlu Booster' | 'Terlambat' | 'Selesai' | 'Dibatalkan';
+
+export interface VaccinationRecord {
+  id: string;
+  patient: ClinicalPatientSnapshot;
+  vaccineName: string;
+  vaccineType: 'Booster' | 'Tahunan' | 'Rabies' | 'Inti' | 'Lainnya';
+  givenDate: string;
+  nextDueDate?: string;
+  veterinarianName: string;
+  batchNumber?: string;
+  status: VaccinationStatus;
+  notes?: string;
+  inventoryItemId?: string;
+  inventoryQuantity?: number;
+  inventoryCommittedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FollowUpStatus = 'Pending' | 'Selesai' | 'Batal';
+
+export interface ClinicalFollowUp {
+  id: string;
+  patient: ClinicalPatientSnapshot;
+  sourceType: 'Rawat Jalan' | 'Rawat Inap' | 'Pasca Operasi' | 'Vaksinasi';
+  sourceId?: string;
+  followUpDate: string;
+  status: FollowUpStatus;
+  staffInCharge: string;
+  lastCondition: string;
+  recommendedAction: string;
+  contactChannel: 'WhatsApp' | 'Telepon' | 'Kunjungan';
+  responseNotes?: string;
+  contactedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
